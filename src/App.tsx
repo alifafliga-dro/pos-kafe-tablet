@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Coffee,
@@ -9,8 +9,11 @@ import {
   ShieldCheck,
   UserCheck,
   KeyRound,
-  Bell,
   Sparkles,
+  Bot,
+  Server,
+  MonitorSmartphone,
+  Lock,
 } from 'lucide-react';
 import {
   UserAccount,
@@ -33,6 +36,7 @@ import { FinanceView } from './components/FinanceView';
 import { ReceiptsSettingsView } from './components/ReceiptsSettingsView';
 import { LoginModal } from './components/LoginModal';
 import { ReceiptModal } from './components/ReceiptModal';
+import { AiAgentDrawer } from './components/AiAgentDrawer';
 
 type ActiveTab = 'pos' | 'inventory' | 'finance' | 'receipts';
 
@@ -42,7 +46,7 @@ const STORAGE_KEYS = {
   transactions: 'kopinusa_trx_v1',
   cashflow: 'kopinusa_cashflow_v1',
   settings: 'kopinusa_settings_v1',
-  currentUser: 'kopinusa_current_user_v1',
+  currentUserSession: 'kopinusa_session_user_v2',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -55,12 +59,41 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function normalizeTwoRoleUsers(list: UserAccount[]): UserAccount[] {
+  const existingAdmin = list.find((u) => u.role === 'admin');
+  return [
+    {
+      ...INITIAL_USERS[0],
+      pin: existingAdmin?.pin && existingAdmin.pin.length >= 4 ? existingAdmin.pin : INITIAL_USERS[0].pin,
+    },
+    {
+      ...INITIAL_USERS[1],
+      pin: '',
+    },
+  ];
+}
+
+function loadSessionUser(usersList: UserAccount[]): UserAccount {
+  const normalized = normalizeTwoRoleUsers(usersList);
+  const defaultCashier = normalized[1];
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEYS.currentUserSession);
+    if (!raw) return defaultCashier;
+    const parsed = JSON.parse(raw) as UserAccount;
+    const matched = normalized.find((u) => u.role === parsed.role);
+    return matched || defaultCashier;
+  } catch {
+    return defaultCashier;
+  }
+}
+
 export function App() {
   const [users, setUsers] = useState<UserAccount[]>(() =>
-    loadFromStorage(STORAGE_KEYS.users, INITIAL_USERS)
+    normalizeTwoRoleUsers(loadFromStorage(STORAGE_KEYS.users, INITIAL_USERS))
   );
+  // Default session is always Client (Karyawan/Kasir) per tab/device until Admin logs in with secret PIN
   const [currentUser, setCurrentUser] = useState<UserAccount>(() =>
-    loadFromStorage(STORAGE_KEYS.currentUser, INITIAL_USERS[0])
+    loadSessionUser(loadFromStorage(STORAGE_KEYS.users, INITIAL_USERS))
   );
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
     loadFromStorage(STORAGE_KEYS.menu, INITIAL_MENU_ITEMS)
@@ -78,33 +111,140 @@ export function App() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState<boolean>(false);
   const [selectedReceipt, setSelectedReceipt] = useState<Transaction | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [clock, setClock] = useState<string>('');
+  const [serverConnected, setServerConnected] = useState<boolean>(true);
+  const isHydratedFromServer = useRef<boolean>(false);
+  const lastSyncedStamp = useRef<string>('');
 
-  // Save to localStorage
+  // Sync from central Vite POS Server on mount & poll for multi-client real-time updates
+  useEffect(() => {
+    let active = true;
+
+    const pullServerState = async (isInitial = false) => {
+      try {
+        const res = await fetch('/api/pos/state');
+        if (
+          !res.ok ||
+          !(res.headers.get('content-type') || '').includes('application/json')
+        ) {
+          setServerConnected(true);
+          return;
+        }
+        const json = await res.json();
+        if (!active) return;
+        setServerConnected(true);
+
+        if (json?.ok && json?.data) {
+          const srv = json.data;
+          if (srv.updatedAt && srv.updatedAt === lastSyncedStamp.current) {
+            return;
+          }
+          if (srv.updatedAt) {
+            lastSyncedStamp.current = srv.updatedAt;
+          }
+          if (Array.isArray(srv.users) && srv.users.length > 0) {
+            const norm = normalizeTwoRoleUsers(srv.users);
+            setUsers(norm);
+            setCurrentUser((prev) => {
+              const updatedSelf = norm.find((u: UserAccount) => u.role === prev.role);
+              return updatedSelf || prev;
+            });
+          }
+          if (Array.isArray(srv.menuItems)) setMenuItems(srv.menuItems);
+          if (Array.isArray(srv.transactions)) setTransactions(srv.transactions);
+          if (Array.isArray(srv.cashflow)) setCashflow(srv.cashflow);
+          if (srv.storeSettings) setSettings([srv.storeSettings]);
+          isHydratedFromServer.current = true;
+        } else if (isInitial) {
+          // Initialize server DB with current state
+          isHydratedFromServer.current = true;
+          pushServerState({
+            users,
+            menuItems,
+            transactions,
+            cashflow,
+            storeSettings,
+          });
+        }
+      } catch {
+        if (active) setServerConnected(false);
+      }
+    };
+
+    pullServerState(true);
+    const pollTimer = setInterval(() => pullServerState(false), 4000);
+    return () => {
+      active = false;
+      clearInterval(pollTimer);
+    };
+  }, []);
+
+  const pushServerState = async (payload: {
+    users?: UserAccount[];
+    menuItems?: MenuItem[];
+    transactions?: Transaction[];
+    cashflow?: CashflowRecord[];
+    storeSettings?: StoreSettings;
+  }) => {
+    try {
+      const res = await fetch('/api/pos/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.updatedAt) {
+          lastSyncedStamp.current = data.updatedAt;
+        }
+        setServerConnected(true);
+      }
+    } catch {
+      setServerConnected(false);
+    }
+  };
+
+  // Save to localStorage & push to Server
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
+    if (isHydratedFromServer.current) {
+      pushServerState({ users });
+    }
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(currentUser));
+    sessionStorage.setItem(STORAGE_KEYS.currentUserSession, JSON.stringify(currentUser));
   }, [currentUser]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.menu, JSON.stringify(menuItems));
+    if (isHydratedFromServer.current) {
+      pushServerState({ menuItems });
+    }
   }, [menuItems]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(transactions));
+    if (isHydratedFromServer.current) {
+      pushServerState({ transactions });
+    }
   }, [transactions]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.cashflow, JSON.stringify(cashflow));
+    if (isHydratedFromServer.current) {
+      pushServerState({ cashflow });
+    }
   }, [cashflow]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(storeSettings));
+    if (isHydratedFromServer.current) {
+      pushServerState({ storeSettings });
+    }
   }, [storeSettings]);
 
   // Live clock
@@ -154,7 +294,7 @@ export function App() {
     setTransactions((prev) => [trx, ...prev]);
     setSelectedReceipt(trx);
     showToast(
-      `Transaksi ${trx.receiptNumber} (${formatRupiah(trx.totalAmount)}) berhasil disimpan!`
+      `Transaksi ${trx.receiptNumber} (${formatRupiah(trx.totalAmount)}) tersimpan ke Server!`
     );
   };
 
@@ -163,7 +303,7 @@ export function App() {
       prev.map((t) => (t.id === updated.id ? updated : t))
     );
     setSelectedReceipt(updated);
-    showToast(`Struk ${updated.receiptNumber} berhasil diperbarui oleh Admin.`);
+    showToast(`Struk ${updated.receiptNumber} berhasil diperbarui di Server oleh Admin.`);
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -179,7 +319,7 @@ export function App() {
       }
       return [item, ...prev];
     });
-    showToast(`Data barang "${item.name}" berhasil disimpan.`);
+    showToast(`Data barang "${item.name}" berhasil disimpan di Server.`);
   };
 
   const handleDeleteMenuItem = (id: string) => {
@@ -230,8 +370,28 @@ export function App() {
   };
 
   const handleSaveUser = (user: UserAccount) => {
-    setUsers((prev) => [...prev, user]);
-    showToast(`Akun "${user.name}" berhasil ditambahkan.`);
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === user.id);
+      if (exists) {
+        return prev.map((u) => (u.id === user.id ? user : u));
+      }
+      return [...prev, user];
+    });
+    if (currentUser.id === user.id) {
+      setCurrentUser(user);
+    }
+    showToast(`Data & PIN akun "${user.name}" berhasil disimpan di Server.`);
+  };
+
+  const handleUpdateUserPin = (userId: string, newPin: string) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, pin: newPin } : u))
+    );
+    if (currentUser.id === userId) {
+      setCurrentUser((prev) => ({ ...prev, pin: newPin }));
+    }
+    const target = users.find((u) => u.id === userId);
+    showToast(`PIN keamanan untuk "${target?.name || 'Akun'}" berhasil diubah!`);
   };
 
   const handleDeleteUser = (id: string) => {
@@ -239,14 +399,30 @@ export function App() {
     showToast('Akun pengguna berhasil dihapus.');
   };
 
+  const handleSwitchToClientMode = () => {
+    const defaultClient =
+      users.find((u) => u.role === 'cashier' && u.active) || INITIAL_USERS[1];
+    setCurrentUser(defaultClient);
+    showToast(
+      `Sesi Server Admin dikunci. Beralih ke Mode Client Karyawan (${defaultClient.name}).`
+    );
+  };
+
   const handleResetDemoData = () => {
     setUsers(INITIAL_USERS);
-    setCurrentUser(INITIAL_USERS[0]);
+    setCurrentUser(INITIAL_USERS[1]);
     setMenuItems(INITIAL_MENU_ITEMS);
     setTransactions(INITIAL_TRANSACTIONS);
     setCashflow(INITIAL_CASHFLOW);
     setSettings([INITIAL_STORE_SETTINGS]);
-    showToast('Seluruh data berhasil dikembalikan ke data awal demo.');
+    pushServerState({
+      users: INITIAL_USERS,
+      menuItems: INITIAL_MENU_ITEMS,
+      transactions: INITIAL_TRANSACTIONS,
+      cashflow: INITIAL_CASHFLOW,
+      storeSettings: INITIAL_STORE_SETTINGS,
+    });
+    showToast('Seluruh data Server berhasil dikembalikan ke data awal demo.');
   };
 
   const lowOrOutCount = menuItems.filter(
@@ -271,7 +447,7 @@ export function App() {
                   KopiNusa <span className="text-amber-400">POS</span>
                 </h1>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Tablet Smart Cashier
+                  {isAdmin ? 'Server Host (Admin)' : 'Client Terminal (Kasir)'}
                 </p>
               </div>
             </div>
@@ -283,7 +459,7 @@ export function App() {
               className="md:hidden rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-amber-300 flex items-center gap-1.5"
             >
               <KeyRound className="h-3.5 w-3.5" />
-              <span>{isAdmin ? 'Admin' : 'Kasir'}</span>
+              <span>{isAdmin ? 'Server Admin' : 'Client Kasir'}</span>
             </button>
           </div>
 
@@ -300,7 +476,7 @@ export function App() {
                 {
                   id: 'inventory',
                   label: 'Stok & Barang',
-                  sub: 'Cek Ketersediaan',
+                  sub: isAdmin ? 'Kelola Stok Server' : 'Cek Ketersediaan',
                   icon: PackageSearch,
                   badge: lowOrOutCount > 0 ? lowOrOutCount : undefined,
                 },
@@ -313,7 +489,7 @@ export function App() {
                 {
                   id: 'receipts',
                   label: 'Struk & Akun',
-                  sub: 'Edit Struk & Pengaturan',
+                  sub: isAdmin ? 'Edit Struk & Ubah PIN' : 'Cetak Ulang Struk',
                   icon: Receipt,
                 },
               ] as const
@@ -363,6 +539,26 @@ export function App() {
 
         {/* Bottom Active User & Quick Role Switcher */}
         <div className="hidden md:flex flex-col gap-2 pt-3 border-t border-slate-800">
+          {/* Quick AI Assistant Button in Sidebar */}
+          <button
+            type="button"
+            onClick={() => setIsAiDrawerOpen(true)}
+            className="w-full rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-indigo-500/15 hover:from-amber-500/25 hover:to-orange-500/25 p-2.5 text-left transition flex items-center gap-2.5 group"
+          >
+            <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20">
+              <Bot className="h-5 w-5 stroke-[2.2]" />
+            </div>
+            <div className="hidden lg:block min-w-0">
+              <div className="text-xs font-extrabold text-amber-300 truncate flex items-center gap-1">
+                <span>Tanya AI Flash</span>
+                <Sparkles className="h-3 w-3 shrink-0" />
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">
+                Bingung? Tanya Cloud AI
+              </div>
+            </div>
+          </button>
+
           <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-2.5">
             <div className="flex items-center gap-2.5">
               <div
@@ -377,25 +573,41 @@ export function App() {
                 <div className="mt-0.5">
                   {isAdmin ? (
                     <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
-                      <ShieldCheck className="h-3 w-3" /> ADMIN (Full Edit)
+                      <Server className="h-3 w-3" /> SERVER (Admin)
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 border border-sky-500/30">
-                      <UserCheck className="h-3 w-3" /> KASIR (No Edit)
+                      <MonitorSmartphone className="h-3 w-3" /> CLIENT (Karyawan)
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsLoginModalOpen(true)}
-              className="mt-2.5 w-full rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 py-2 px-2.5 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition"
-            >
-              <KeyRound className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden lg:inline">Ganti Akun / Shift</span>
-            </button>
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="w-full rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 py-2 px-2.5 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition"
+              >
+                <KeyRound className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden lg:inline">
+                  {isAdmin ? 'Ubah PIN / Ganti Sesi' : 'Ganti Shift / Login Admin'}
+                </span>
+              </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleSwitchToClientMode}
+                  className="w-full rounded-xl border border-sky-500/30 bg-sky-500/15 hover:bg-sky-500 hover:text-slate-950 py-1.5 px-2.5 text-[11px] font-extrabold text-sky-300 flex items-center justify-center gap-1.5 transition"
+                  title="Kunci sesi Admin dan kembali ke mode Client untuk karyawan"
+                >
+                  <Lock className="h-3 w-3 shrink-0" />
+                  <span className="hidden lg:inline">Kunci ke Mode Client</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -412,41 +624,71 @@ export function App() {
             <span className="hidden sm:inline-block text-xs text-slate-400">
               {clock}
             </span>
+            <span
+              className={`hidden md:inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                isAdmin
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  : 'bg-sky-500/15 border-sky-500/30 text-sky-300'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  serverConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                }`}
+              />
+              {isAdmin
+                ? 'SERVER HOST (SESI ADMIN)'
+                : 'CLIENT TERMINAL (VERSI KARYAWAN)'}
+            </span>
           </div>
 
-          {/* Instant Role Indicator & Quick Toggle Pill for Easy Testing */}
+          {/* Instant Role Indicator & Mode Switcher */}
           <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsAiDrawerOpen(true)}
+              className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 px-3.5 py-1.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition active:scale-95"
+            >
+              <Bot className="h-4 w-4 stroke-[2.3]" />
+              <span>Bingung? Tanya AI Flash</span>
+            </button>
+
             <div className="hidden sm:flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 text-xs">
-              {users.slice(0, 2).map((u) => {
-                const active = currentUser.id === u.id;
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      if (currentUser.id !== u.id) {
-                        setIsLoginModalOpen(true);
-                      }
-                    }}
-                    className={`rounded-xl px-2.5 py-1 font-bold flex items-center gap-1 transition ${
-                      active
-                        ? u.role === 'admin'
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-sky-500 text-slate-950'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {u.role === 'admin' ? (
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                    ) : (
-                      <UserCheck className="h-3.5 w-3.5" />
-                    )}
-                    <span>
-                      {u.role === 'admin' ? 'Mode Admin' : 'Mode Kasir (Client)'}
-                    </span>
-                  </button>
-                );
-              })}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isAdmin) {
+                    handleSwitchToClientMode();
+                  }
+                }}
+                className={`rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
+                  !isAdmin
+                    ? 'bg-sky-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Mode Client untuk Karyawan / Kasir"
+              >
+                <MonitorSmartphone className="h-3.5 w-3.5" />
+                <span>Client (Karyawan)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAdmin) {
+                    setIsLoginModalOpen(true);
+                  }
+                }}
+                className={`rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
+                  isAdmin
+                    ? 'bg-amber-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Mode Server untuk Owner / Admin (Wajib PIN)"
+              >
+                <Server className="h-3.5 w-3.5" />
+                <span>Server (Admin)</span>
+              </button>
             </div>
 
             <button
@@ -455,7 +697,7 @@ export function App() {
               className="rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-300 flex items-center gap-1.5 transition"
             >
               <KeyRound className="h-3.5 w-3.5" />
-              <span>PIN / Akun</span>
+              <span>{isAdmin ? 'Ubah PIN / Akun' : 'PIN / Akun'}</span>
             </button>
           </div>
         </header>
@@ -521,17 +763,20 @@ export function App() {
         </div>
       </main>
 
-      {/* Login / Switch Account Modal */}
+      {/* Login / Switch Account / Change Admin PIN Modal */}
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         users={users}
         currentUser={currentUser}
+        onUpdateUserPin={handleUpdateUserPin}
         onSelectUser={(user) => {
           setCurrentUser(user);
           showToast(
-            `Berhasil beralih ke akun: ${user.name} (${
-              user.role === 'admin' ? 'Akses Edit Penuh' : 'Mode Terbatas Kasir'
+            `Berhasil beralih ke: ${user.name} (${
+              user.role === 'admin'
+                ? 'Mode Server Admin - Akses Penuh'
+                : 'Mode Client Karyawan - Kasir'
             })`
           );
         }}
@@ -545,6 +790,18 @@ export function App() {
         currentUser={currentUser}
         onUpdateTransaction={handleUpdateTransaction}
         onDeleteTransaction={handleDeleteTransaction}
+      />
+
+      {/* Google Gemini Flash Cloud AI Agent Drawer */}
+      <AiAgentDrawer
+        isOpen={isAiDrawerOpen}
+        onClose={() => setIsAiDrawerOpen(false)}
+        menuItems={menuItems}
+        transactions={transactions}
+        cashflow={cashflow}
+        currentUser={currentUser}
+        settings={storeSettings}
+        onRequestAdminLogin={() => setIsLoginModalOpen(true)}
       />
 
       {/* Animated Toast Notification */}

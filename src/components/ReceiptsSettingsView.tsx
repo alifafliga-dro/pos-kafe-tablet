@@ -13,6 +13,11 @@ import {
   UserCheck,
   RotateCcw,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Save,
+  X,
 } from 'lucide-react';
 import {
   Transaction,
@@ -58,6 +63,36 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
   const [newPin, setNewPin] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('cashier');
   const [newShift, setNewShift] = useState('Shift Reguler');
+
+  // Edit existing user PIN/profile state for Admin
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserPin, setEditUserPin] = useState('');
+  const [editUserShift, setEditUserShift] = useState('');
+  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
+  const toggleRevealPin = (userId: string) => {
+    setRevealedPins((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const startEditUser = (u: UserAccount) => {
+    setEditingUserId(u.id);
+    setEditUserName(u.name);
+    setEditUserPin(u.pin);
+    setEditUserShift(u.shift);
+  };
+
+  const handleSaveEditUser = (u: UserAccount) => {
+    const cleanPin = editUserPin.replace(/\D/g, '');
+    if (!editUserName.trim() || cleanPin.length < 4) return;
+    onSaveUser({
+      ...u,
+      name: editUserName.trim(),
+      pin: cleanPin,
+      shift: editUserShift.trim() || u.shift,
+    });
+    setEditingUserId(null);
+  };
 
   const filteredTrx = transactions.filter(
     (t) =>
@@ -270,10 +305,10 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                 <Lock className="h-8 w-8" />
               </div>
               <h3 className="text-lg font-extrabold text-white">
-                Pengaturan Struk Dikunci untuk Akun Kasir
+                Pengaturan Struk Dikunci untuk Mode Client (Kasir)
               </h3>
               <p className="text-xs text-slate-400 max-w-md mt-2 leading-relaxed">
-                Karyawan / Kasir tidak diizinkan mengubah nama kafe, persentase pajak PB1, maupun format cetakan struk. Silakan klik tombol <strong>Ganti Shift / Akun</strong> di pojok kiri bawah dan masuk sebagai <strong>Admin (PIN: 1234)</strong>.
+                Karyawan pada Mode Client tidak diizinkan mengubah nama kafe, persentase pajak PB1, maupun format cetakan struk. Silakan masuk ke <strong>Sesi Server (Admin)</strong> menggunakan PIN rahasia Admin untuk membuka pengaturan ini.
               </p>
             </div>
           ) : (
@@ -499,7 +534,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
         </div>
       )}
 
-      {/* Sub-Tab 3: User Accounts Management */}
+      {/* Sub-Tab 3: Server Admin PIN & Client Mode Management */}
       {subTab === 'accounts' && (
         <div className="flex-1 overflow-y-auto rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
           {!isAdmin ? (
@@ -508,121 +543,142 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                 <Lock className="h-8 w-8" />
               </div>
               <h3 className="text-lg font-extrabold text-white">
-                Manajemen Akun Hanya untuk Admin
+                Pengaturan PIN Server Hanya untuk Admin
               </h3>
               <p className="text-xs text-slate-400 max-w-md mt-2">
-                Akun Kasir / Karyawan tidak dapat melihat PIN akun lain atau mengubah hak akses.
+                Sesi Client (Karyawan) berjalan tanpa PIN dan tidak dapat mengubah PIN Server Admin.
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs">
-              <div className="lg:col-span-7 space-y-3">
-                <h3 className="text-sm font-extrabold text-white mb-2">
-                  Daftar Akun Terdaftar
+            <div className="max-w-3xl space-y-4 text-xs">
+              <div className="mb-2">
+                <h3 className="text-sm font-extrabold text-white">
+                  Pengaturan Sesi: Server (Admin) & Client (Karyawan)
                 </h3>
-                {users.map((u) => (
-                  <div
-                    key={u.id}
-                    className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`h-11 w-11 rounded-2xl bg-gradient-to-br ${u.avatarColor} flex items-center justify-center text-white font-bold text-base`}
-                      >
-                        {u.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-bold text-white text-sm">{u.name}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                          {u.role === 'admin' ? (
-                            <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                              <ShieldCheck className="h-3 w-3" /> ADMIN
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
-                              <UserCheck className="h-3 w-3" /> KASIR / CLIENT
-                            </span>
-                          )}
-                          <span className="text-slate-400">PIN: {u.pin}</span>
-                          <span className="text-slate-500">• {u.shift}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {users.length > 1 && u.id !== currentUser.id && (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteUser(u.id)}
-                        className="rounded-xl bg-rose-500/15 hover:bg-rose-500/30 p-2 text-rose-300 transition"
-                        title="Hapus Akun"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                <p className="text-[11px] text-slate-400">
+                  Hanya ada 2 mode sesi: <strong>Client (Karyawan)</strong> masuk langsung tanpa PIN, sedangkan <strong>Server (Admin)</strong> wajib menggunakan PIN rahasia yang bisa Anda ubah di bawah ini.
+                </p>
               </div>
 
-              <form
-                onSubmit={handleAddUser}
-                className="lg:col-span-5 rounded-3xl border border-slate-800 bg-slate-950/70 p-5 space-y-3 h-fit"
-              >
-                <h3 className="text-sm font-extrabold text-white">
-                  Tambah Akun Kasir / Admin Baru
-                </h3>
-                <div>
-                  <label className="block text-slate-400 mb-1">Nama Lengkap</label>
-                  <input
-                    type="text"
-                    required
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Contoh: Rina (Kasir Siang)"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-400 mb-1">Peran Akses</label>
-                    <select
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value as UserRole)}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-                    >
-                      <option value="cashier">Kasir / Client (Terbatas)</option>
-                      <option value="admin">Admin (Full Edit)</option>
-                    </select>
+              {users.map((u) => {
+                const isEditingThis = editingUserId === u.id;
+                const isRevealed = !!revealedPins[u.id];
+                const isUserAdmin = u.role === 'admin';
+                return (
+                  <div
+                    key={u.id}
+                    className={`rounded-2xl border p-4 transition ${
+                      isEditingThis
+                        ? 'border-amber-500 bg-amber-500/10'
+                        : 'border-slate-800 bg-slate-950/70'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`h-11 w-11 rounded-2xl bg-gradient-to-br ${u.avatarColor} flex items-center justify-center text-white font-bold text-base shrink-0`}
+                        >
+                          {u.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm flex items-center gap-2">
+                            <span>{u.name}</span>
+                            {u.id === currentUser.id && (
+                              <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                                Sesi Aktif
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {isUserAdmin ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                  <ShieldCheck className="h-3 w-3" /> SERVER ADMIN (WAJIB PIN)
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2 py-0.5 text-slate-300 font-mono">
+                                  <span>
+                                    PIN: {isRevealed ? u.pin : '•'.repeat(u.pin.length || 4)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRevealPin(u.id)}
+                                    className="text-slate-400 hover:text-amber-300"
+                                    title={isRevealed ? 'Sembunyikan PIN' : 'Lihat PIN'}
+                                  >
+                                    {isRevealed ? (
+                                      <EyeOff className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <Eye className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                </span>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+                                <UserCheck className="h-3 w-3" /> CLIENT KARYAWAN (TANPA PIN • LANGSUNG MASUK)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            isEditingThis ? setEditingUserId(null) : startEditUser(u)
+                          }
+                          className="rounded-xl bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/30 px-3.5 py-2 text-xs font-extrabold text-amber-300 flex items-center gap-1.5 transition"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          <span>{isEditingThis ? 'Batal' : 'Ubah PIN Admin'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditingThis && isUserAdmin && (
+                      <div className="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                        <div className="sm:col-span-5">
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Nama Sesi Admin
+                          </label>
+                          <input
+                            type="text"
+                            value={editUserName}
+                            onChange={(e) => setEditUserName(e.target.value)}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
+                          />
+                        </div>
+                        <div className="sm:col-span-4">
+                          <label className="block text-[11px] text-amber-300 font-bold mb-1">
+                            PIN Admin Baru (4-6 Angka)
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={editUserPin}
+                            onChange={(e) =>
+                              setEditUserPin(e.target.value.replace(/\D/g, ''))
+                            }
+                            className="w-full rounded-xl border border-amber-500/50 bg-slate-900 px-3 py-2 text-amber-400 font-mono font-bold tracking-widest"
+                          />
+                        </div>
+                        <div className="sm:col-span-3 flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditUser(u)}
+                            className="flex-1 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2 px-3 font-extrabold text-slate-950 flex items-center justify-center gap-1 transition"
+                          >
+                            <Save className="h-3.5 w-3.5" />
+                            <span>Simpan PIN</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-slate-400 mb-1">PIN Login (4 Digit)</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
-                      value={newPin}
-                      onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="Contoh: 2222"
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-amber-400 font-mono font-bold"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Jadwal Shift</label>
-                  <input
-                    type="text"
-                    value={newShift}
-                    onChange={(e) => setNewShift(e.target.value)}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full rounded-2xl bg-amber-500 hover:bg-amber-400 py-3 font-extrabold text-slate-950 flex items-center justify-center gap-1.5 transition"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Simpan Akun Baru</span>
-                </button>
-              </form>
+                );
+              })}
             </div>
           )}
         </div>
