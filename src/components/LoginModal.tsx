@@ -15,6 +15,12 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { UserAccount } from '../types';
+import {
+  springSnappy,
+  tapScale,
+  backdropVariants,
+  modalPanelVariants,
+} from '../lib/motion';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -60,8 +66,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setConfirmPinValue('');
     }
   }, [isOpen, currentUser]);
-
-  if (!isOpen) return null;
 
   const isCurrentAdmin = currentUser.role === 'admin';
   const expectedPinLength = Math.max(4, adminAccount?.pin?.length || 4);
@@ -136,17 +140,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   return (
     <AnimatePresence>
+      {isOpen && (
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        variants={backdropVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4"
       >
         <motion.div
-          initial={{ scale: 0.94, opacity: 0, y: 16 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.94, opacity: 0, y: 16 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+          variants={modalPanelVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
           className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl grid grid-cols-1 md:grid-cols-12"
         >
           {!forceLock && (
@@ -405,77 +411,96 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   </p>
 
                   {/* PIN Dots (Hidden PIN - never exposed) */}
-                  <div className="my-5 flex justify-center gap-3">
+                  <motion.div
+                    key={errorMsg ? 'error' : 'normal'}
+                    animate={errorMsg ? { x: [0, -8, 8, -6, 6, 0] } : { x: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="my-5 flex justify-center gap-3"
+                  >
                     {Array.from({ length: expectedPinLength }).map((_, idx) => {
                       const filled = pinInput.length > idx;
                       return (
                         <motion.div
                           key={idx}
-                          animate={{ scale: filled ? 1.18 : 1 }}
-                          className={`h-4 w-4 rounded-full border transition-all ${
+                          animate={{ scale: filled ? 1.2 : 1 }}
+                          transition={springSnappy}
+                          className={`h-4 w-4 rounded-full border transition-colors ${
                             filled
                               ? 'bg-amber-400 border-amber-400 shadow-md shadow-amber-400/50'
+                              : errorMsg
+                              ? 'bg-rose-500/20 border-rose-500/50'
                               : 'bg-slate-900 border-slate-700'
                           }`}
                         />
                       );
                     })}
-                  </div>
+                  </motion.div>
 
                   {errorMsg && (
-                    <p className="text-xs font-medium text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl py-2 px-3 mb-3">
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-xs font-medium text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl py-2 px-3 mb-3"
+                    >
                       {errorMsg}
-                    </p>
+                    </motion.p>
                   )}
                 </div>
 
                 {/* Keypad Grid */}
                 <div className="grid grid-cols-3 gap-3 my-2">
                   {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                    <button
+                    <motion.button
+                      whileTap={{ scale: 0.92 }}
                       key={digit}
                       type="button"
                       onClick={() => handleDigit(digit)}
-                      className="h-14 rounded-2xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-xl font-bold text-white transition shadow-sm"
+                      className="h-14 rounded-2xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 text-xl font-bold text-white transition shadow-sm"
                     >
                       {digit}
-                    </button>
+                    </motion.button>
                   ))}
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
                     type="button"
                     onClick={() => setPinInput('')}
-                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/60 hover:bg-rose-500/15 hover:text-rose-300 active:scale-95 text-xs font-bold text-slate-400 transition"
+                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/60 hover:bg-rose-500/15 hover:text-rose-300 text-xs font-bold text-slate-400 transition"
                   >
                     CLEAR
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
                     type="button"
                     onClick={() => handleDigit('0')}
-                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 active:scale-95 text-xl font-bold text-white transition shadow-sm"
+                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 text-xl font-bold text-white transition shadow-sm"
                   >
                     0
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
                     type="button"
                     onClick={handleBackspace}
-                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800 active:scale-95 flex items-center justify-center text-slate-300 transition"
+                    className="h-14 rounded-2xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800 flex items-center justify-center text-slate-300 transition"
                   >
                     <Delete className="h-5 w-5" />
-                  </button>
+                  </motion.button>
                 </div>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={tapScale}
                   type="button"
                   onClick={() => handleVerifyAdmin()}
-                  className="mt-4 w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 py-3.5 font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 active:scale-98 transition"
+                  className="mt-4 w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 py-3.5 font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 transition"
                 >
                   Buka Sesi Server (Admin)
-                </button>
+                </motion.button>
               </>
             )}
           </div>
         </motion.div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 };

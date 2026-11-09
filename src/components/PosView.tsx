@@ -15,14 +15,13 @@ import {
   Building2,
   Sparkles,
   CheckCircle2,
-  AlertCircle,
   SlidersHorizontal,
   X,
+  Bot,
 } from 'lucide-react';
 import {
   MenuItem,
   CartItem,
-  MenuCategory,
   OrderType,
   PaymentMethod,
   StoreSettings,
@@ -30,12 +29,22 @@ import {
   Transaction,
 } from '../types';
 import { MENU_CATEGORIES, formatRupiah } from '../data/initialData';
+import {
+  springSnappy,
+  springSoft,
+  tapScale,
+  hoverLift,
+  backdropVariants,
+  modalPanelVariants,
+  useAnimatedNumber,
+} from '../lib/motion';
 
 interface PosViewProps {
   menuItems: MenuItem[];
   settings: StoreSettings;
   currentUser: UserAccount;
   onCompleteOrder: (transaction: Transaction) => void;
+  onAskAi?: (prompt?: string) => void;
 }
 
 const TABLE_OPTIONS = [
@@ -55,6 +64,7 @@ export const PosView: React.FC<PosViewProps> = ({
   settings,
   currentUser,
   onCompleteOrder,
+  onAskAi,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -202,6 +212,11 @@ export const PosView: React.FC<PosViewProps> = ({
   const serviceAmount = Math.round((afterDiscount * settings.servicePercent) / 100);
   const totalAmount = afterDiscount + taxAmount + serviceAmount;
 
+  const animatedSubtotal = useAnimatedNumber(subtotal, 0.35);
+  const animatedTaxAndService = useAnimatedNumber(taxAmount + serviceAmount, 0.35);
+  const animatedTotal = useAnimatedNumber(totalAmount, 0.4);
+  const animatedChange = useAnimatedNumber(Math.max(0, cashReceived - totalAmount), 0.35);
+
   const handleOpenCheckout = () => {
     if (cart.length === 0) return;
     setCashReceived(totalAmount);
@@ -267,29 +282,62 @@ export const PosView: React.FC<PosViewProps> = ({
           </div>
 
           <div className="flex items-center rounded-2xl border border-slate-800 bg-slate-950/80 p-1 text-xs">
-            <button
+            <motion.button
+              whileTap={tapScale}
               type="button"
               onClick={() => setStockFilter('all')}
-              className={`rounded-xl px-3 py-1.5 font-semibold transition ${
+              className={`relative rounded-xl px-3 py-1.5 font-semibold transition ${
                 stockFilter === 'all'
-                  ? 'bg-slate-800 text-white'
+                  ? 'text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Semua Menu ({menuItems.length})
-            </button>
-            <button
+              {stockFilter === 'all' && (
+                <motion.span
+                  layoutId="posStockFilterPill"
+                  transition={springSnappy}
+                  className="absolute inset-0 rounded-xl bg-slate-800"
+                />
+              )}
+              <span className="relative z-10">Semua Menu ({menuItems.length})</span>
+            </motion.button>
+            <motion.button
+              whileTap={tapScale}
               type="button"
               onClick={() => setStockFilter('available')}
-              className={`rounded-xl px-3 py-1.5 font-semibold transition ${
+              className={`relative rounded-xl px-3 py-1.5 font-semibold transition ${
                 stockFilter === 'available'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  ? 'text-emerald-300'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Tersedia ({menuItems.filter((m) => m.isAvailable && m.stock > 0).length})
-            </button>
+              {stockFilter === 'available' && (
+                <motion.span
+                  layoutId="posStockFilterPill"
+                  transition={springSnappy}
+                  className="absolute inset-0 rounded-xl bg-emerald-500/20 border border-emerald-500/30"
+                />
+              )}
+              <span className="relative z-10">
+                Tersedia ({menuItems.filter((m) => m.isAvailable && m.stock > 0).length})
+              </span>
+            </motion.button>
           </div>
+
+          {onAskAi && (
+            <motion.button
+              whileHover={hoverLift}
+              whileTap={tapScale}
+              type="button"
+              onClick={() => onAskAi('Rekomendasi paket menu kopi & snack')}
+              className="rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 text-xs font-extrabold text-amber-300 flex items-center gap-1.5 transition"
+              title="Tanya AI rekomendasi menu dan paket bundling"
+            >
+              <Bot className="h-4 w-4 text-amber-400" />
+              <span className="hidden sm:inline">Tanya AI Menu</span>
+              <Sparkles className="h-3 w-3 text-amber-400" />
+            </motion.button>
+          )}
         </div>
 
         {/* Category Pills */}
@@ -297,18 +345,26 @@ export const PosView: React.FC<PosViewProps> = ({
           {['Semua', ...MENU_CATEGORIES].map((cat) => {
             const active = selectedCategory === cat;
             return (
-              <button
+              <motion.button
                 key={cat}
+                whileTap={tapScale}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`shrink-0 rounded-2xl px-4 py-2 text-xs font-bold transition-all active:scale-95 ${
+                className={`relative shrink-0 rounded-2xl px-4 py-2 text-xs font-bold transition-colors ${
                   active
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                    ? 'text-slate-950'
                     : 'border border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
                 }`}
               >
-                {cat}
-              </button>
+                {active && (
+                  <motion.span
+                    layoutId="posCategoryPill"
+                    transition={springSnappy}
+                    className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 shadow-lg shadow-amber-500/20"
+                  />
+                )}
+                <span className="relative z-10">{cat}</span>
+              </motion.button>
             );
           })}
         </div>
@@ -325,26 +381,32 @@ export const PosView: React.FC<PosViewProps> = ({
               return (
                 <motion.div
                   layout
-                  initial={{ opacity: 0, scale: 0.94 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, scale: 0.94, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.94 }}
-                  transition={{ duration: 0.16 }}
+                  whileHover={!isOut ? hoverLift : undefined}
+                  whileTap={!isOut ? tapScale : undefined}
+                  transition={springSoft}
                   key={item.id}
                   onClick={() => handleQuickAdd(item)}
-                  className={`group relative rounded-2xl border p-3.5 flex flex-col justify-between transition-all ${
+                  className={`group relative rounded-2xl border p-3.5 flex flex-col justify-between transition-colors ${
                     isOut
                       ? 'border-slate-800/60 bg-slate-950/40 opacity-55 cursor-not-allowed'
                       : qtyInCart > 0
-                      ? 'border-amber-500/70 bg-amber-500/10 cursor-pointer shadow-lg shadow-amber-500/5 active:scale-95'
-                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800/50 cursor-pointer active:scale-95'
+                      ? 'border-amber-500/70 bg-amber-500/10 cursor-pointer shadow-lg shadow-amber-500/5'
+                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800/50 cursor-pointer'
                   }`}
                 >
                   {/* Top Row: Emoji & Stock Badge */}
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-2xl shadow-inner">
+                      <motion.div
+                        animate={{ scale: qtyInCart > 0 ? 1.06 : 1 }}
+                        transition={springSnappy}
+                        className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-2xl shadow-inner"
+                      >
                         {item.emoji}
-                      </div>
+                      </motion.div>
                       <div className="flex flex-col items-end gap-1">
                         {isOut ? (
                           <span className="rounded-lg bg-rose-500/20 border border-rose-500/30 px-2 py-0.5 text-[10px] font-bold text-rose-300">
@@ -360,11 +422,20 @@ export const PosView: React.FC<PosViewProps> = ({
                           </span>
                         )}
 
-                        {qtyInCart > 0 && (
-                          <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-extrabold text-slate-950">
-                            +{qtyInCart} di Bill
-                          </span>
-                        )}
+                        <AnimatePresence>
+                          {qtyInCart > 0 && (
+                            <motion.span
+                              key={qtyInCart}
+                              initial={{ scale: 0.5, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0.5, opacity: 0 }}
+                              transition={springSnappy}
+                              className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-extrabold text-slate-950 shadow-sm"
+                            >
+                              +{qtyInCart} di Bill
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
 
@@ -382,14 +453,15 @@ export const PosView: React.FC<PosViewProps> = ({
                       {formatRupiah(item.price)}
                     </span>
                     {!isOut && (
-                      <button
+                      <motion.button
+                        whileTap={tapScale}
                         type="button"
                         onClick={(e) => openCustomizeModal(item, e)}
                         className="rounded-xl bg-slate-800/90 hover:bg-amber-500 hover:text-slate-950 p-1.5 text-slate-300 transition"
                         title="Atur Gula / Es / Catatan Pesanan"
                       >
                         <SlidersHorizontal className="h-3.5 w-3.5" />
-                      </button>
+                      </motion.button>
                     )}
                   </div>
                 </motion.div>
@@ -409,21 +481,32 @@ export const PosView: React.FC<PosViewProps> = ({
               { type: 'Takeaway', icon: Package, label: 'Takeaway' },
               { type: 'Delivery', icon: Truck, label: 'Delivery' },
             ] as const
-          ).map(({ type, icon: Icon, label }) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setOrderType(type)}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition ${
-                orderType === type
-                  ? 'bg-amber-500 text-slate-950 shadow'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-            </button>
-          ))}
+          ).map(({ type, icon: Icon, label }) => {
+            const active = orderType === type;
+            return (
+              <motion.button
+                key={type}
+                whileTap={tapScale}
+                type="button"
+                onClick={() => setOrderType(type)}
+                className={`relative flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition ${
+                  active
+                    ? 'text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="posOrderTypePill"
+                    transition={springSnappy}
+                    className="absolute inset-0 rounded-xl bg-amber-500 shadow"
+                  />
+                )}
+                <Icon className="relative z-10 h-3.5 w-3.5" />
+                <span className="relative z-10">{label}</span>
+              </motion.button>
+            );
+          })}
         </div>
 
         {/* Customer & Table Row */}
@@ -457,23 +540,45 @@ export const PosView: React.FC<PosViewProps> = ({
         {/* Cart Items List */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-              <div className="h-14 w-14 rounded-3xl bg-slate-950 border border-slate-800 flex items-center justify-center mb-3 text-slate-600">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={springSoft}
+              className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500"
+            >
+              <motion.div
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                className="h-14 w-14 rounded-3xl bg-slate-950 border border-slate-800 flex items-center justify-center mb-3 text-slate-600"
+              >
                 <ShoppingBag className="h-7 w-7" />
-              </div>
+              </motion.div>
               <p className="text-sm font-semibold text-slate-400">Belum Ada Pesanan</p>
               <p className="text-xs text-slate-500 mt-1 max-w-[220px]">
                 Sentuh kartu menu di sebelah kiri untuk menambahkan pesanan ke struk.
               </p>
-            </div>
+              {onAskAi && (
+                <motion.button
+                  whileHover={hoverLift}
+                  whileTap={tapScale}
+                  type="button"
+                  onClick={() => onAskAi('Panduan cara input order kasir sampai cetak struk')}
+                  className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-[11px] font-bold text-amber-300 flex items-center gap-1.5 transition"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  <span>Bingung cara order? Tanya AI</span>
+                </motion.button>
+              )}
+            </motion.div>
           ) : (
             <AnimatePresence initial={false}>
               {cart.map((item) => (
                 <motion.div
                   layout
-                  initial={{ opacity: 0, x: 16 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -16 }}
+                  initial={{ opacity: 0, x: 16, scale: 0.96 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: -16, scale: 0.95 }}
+                  transition={springSnappy}
                   key={item.cartItemId}
                   className="rounded-2xl border border-slate-800/90 bg-slate-950/80 p-3 flex items-center justify-between gap-2"
                 >
@@ -494,23 +599,31 @@ export const PosView: React.FC<PosViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <button
+                    <motion.button
+                      whileTap={tapScale}
                       type="button"
                       onClick={() => updateCartItemQty(item, -1)}
-                      className="h-8 w-8 rounded-xl border border-slate-800 bg-slate-900 hover:bg-rose-500/20 hover:text-rose-300 flex items-center justify-center text-slate-300 active:scale-90 transition"
+                      className="h-8 w-8 rounded-xl border border-slate-800 bg-slate-900 hover:bg-rose-500/20 hover:text-rose-300 flex items-center justify-center text-slate-300 transition"
                     >
                       <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-extrabold text-white">
+                    </motion.button>
+                    <motion.span
+                      key={item.quantity}
+                      initial={{ scale: 0.7 }}
+                      animate={{ scale: 1 }}
+                      transition={springSnappy}
+                      className="w-6 text-center text-xs font-extrabold text-white"
+                    >
                       {item.quantity}
-                    </span>
-                    <button
+                    </motion.span>
+                    <motion.button
+                      whileTap={tapScale}
                       type="button"
                       onClick={() => updateCartItemQty(item, 1)}
-                      className="h-8 w-8 rounded-xl border border-slate-800 bg-slate-900 hover:bg-emerald-500/20 hover:text-emerald-300 flex items-center justify-center text-slate-300 active:scale-90 transition"
+                      className="h-8 w-8 rounded-xl border border-slate-800 bg-slate-900 hover:bg-emerald-500/20 hover:text-emerald-300 flex items-center justify-center text-slate-300 transition"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                    </button>
+                    </motion.button>
                   </div>
                 </motion.div>
               ))}
@@ -526,8 +639,9 @@ export const PosView: React.FC<PosViewProps> = ({
               <span className="text-slate-400">Potongan Promo:</span>
               <div className="flex items-center gap-1">
                 {[0, 5000, 10000, 20000].map((disc) => (
-                  <button
+                  <motion.button
                     key={disc}
+                    whileTap={tapScale}
                     type="button"
                     onClick={() => setDiscountAmount(disc)}
                     className={`rounded-lg px-2 py-1 text-[10px] font-bold transition ${
@@ -537,7 +651,7 @@ export const PosView: React.FC<PosViewProps> = ({
                     }`}
                   >
                     {disc === 0 ? 'Tanpa' : `-${disc / 1000}rb`}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
@@ -546,50 +660,57 @@ export const PosView: React.FC<PosViewProps> = ({
           <div className="rounded-2xl bg-slate-950/90 border border-slate-800/80 p-3 space-y-1 text-xs">
             <div className="flex justify-between text-slate-400">
               <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} item)</span>
-              <span className="text-slate-200 font-medium">{formatRupiah(subtotal)}</span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatRupiah(animatedSubtotal)}
+              </span>
             </div>
             {validDiscount > 0 && (
               <div className="flex justify-between text-emerald-400">
                 <span>Diskon Promo</span>
-                <span>-{formatRupiah(validDiscount)}</span>
+                <span className="tabular-nums">-{formatRupiah(validDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between text-slate-400">
               <span>
                 Pajak PB1 ({settings.taxPercent}%) & Service ({settings.servicePercent}%)
               </span>
-              <span className="text-slate-200">
-                {formatRupiah(taxAmount + serviceAmount)}
+              <span className="text-slate-200 tabular-nums">
+                {formatRupiah(animatedTaxAndService)}
               </span>
             </div>
             <div className="flex justify-between items-center pt-1.5 border-t border-slate-800 text-sm font-extrabold">
               <span className="text-white">TOTAL TAGIHAN</span>
-              <span className="text-lg text-amber-400">{formatRupiah(totalAmount)}</span>
+              <span className="text-lg text-amber-400 tabular-nums">
+                {formatRupiah(animatedTotal)}
+              </span>
             </div>
           </div>
 
           <div className="flex gap-2">
             {cart.length > 0 && (
-              <button
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={() => setCart([])}
-                className="rounded-2xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3.5 py-3.5 text-rose-300 transition active:scale-95"
+                className="rounded-2xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3.5 py-3.5 text-rose-300 transition"
                 title="Kosongkan Keranjang"
               >
                 <Trash2 className="h-5 w-5" />
-              </button>
+              </motion.button>
             )}
-            <button
+            <motion.button
+              whileHover={cart.length > 0 ? { scale: 1.01 } : undefined}
+              whileTap={cart.length > 0 ? tapScale : undefined}
               type="button"
               disabled={cart.length === 0}
               onClick={handleOpenCheckout}
-              className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed py-3.5 px-4 font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center justify-between transition active:scale-98"
+              className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed py-3.5 px-4 font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center justify-between transition"
             >
               <span>Proses Bayar & Struk</span>
-              <span className="font-mono text-sm bg-slate-950/20 px-2.5 py-1 rounded-xl">
-                {formatRupiah(totalAmount)}
+              <span className="font-mono text-sm bg-slate-950/20 px-2.5 py-1 rounded-xl tabular-nums">
+                {formatRupiah(animatedTotal)}
               </span>
-            </button>
+            </motion.button>
           </div>
         </div>
       </div>
@@ -598,15 +719,17 @@ export const PosView: React.FC<PosViewProps> = ({
       <AnimatePresence>
         {customizingItem && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
           >
             <motion.div
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.94, opacity: 0 }}
+              variants={modalPanelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
             >
               <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -619,12 +742,13 @@ export const PosView: React.FC<PosViewProps> = ({
                     </p>
                   </div>
                 </div>
-                <button
+                <motion.button
+                  whileTap={tapScale}
                   onClick={() => setCustomizingItem(null)}
                   className="rounded-xl bg-slate-800 p-2 text-slate-400 hover:text-white"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </motion.button>
               </div>
 
               <div className="my-4 space-y-4 text-xs">
@@ -634,7 +758,8 @@ export const PosView: React.FC<PosViewProps> = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {['Normal Sugar', 'Less Sugar', 'No Sugar'].map((opt) => (
-                      <button
+                      <motion.button
+                        whileTap={tapScale}
                         key={opt}
                         type="button"
                         onClick={() => setSugarLevel(opt)}
@@ -645,7 +770,7 @@ export const PosView: React.FC<PosViewProps> = ({
                         }`}
                       >
                         {opt}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -656,7 +781,8 @@ export const PosView: React.FC<PosViewProps> = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {['Normal Ice', 'Less Ice', 'Hot / Panas'].map((opt) => (
-                      <button
+                      <motion.button
+                        whileTap={tapScale}
                         key={opt}
                         type="button"
                         onClick={() => setIceLevel(opt)}
@@ -667,7 +793,7 @@ export const PosView: React.FC<PosViewProps> = ({
                         }`}
                       >
                         {opt}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -686,13 +812,14 @@ export const PosView: React.FC<PosViewProps> = ({
                 </div>
               </div>
 
-              <button
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={confirmCustomizedAdd}
                 className="w-full rounded-2xl bg-amber-500 hover:bg-amber-400 py-3 font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition"
               >
                 Tambahkan ke Pesanan
-              </button>
+              </motion.button>
             </motion.div>
           </motion.div>
         )}
@@ -702,15 +829,17 @@ export const PosView: React.FC<PosViewProps> = ({
       <AnimatePresence>
         {isCheckoutOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4"
           >
             <motion.div
-              initial={{ scale: 0.94, opacity: 0, y: 12 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.94, opacity: 0, y: 12 }}
+              variants={modalPanelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
             >
               <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -721,20 +850,21 @@ export const PosView: React.FC<PosViewProps> = ({
                     {customerName || 'Pelanggan Walk-In'}
                   </p>
                 </div>
-                <button
+                <motion.button
+                  whileTap={tapScale}
                   onClick={() => setIsCheckoutOpen(false)}
                   className="rounded-xl bg-slate-800 p-2 text-slate-400 hover:text-white"
                 >
                   <X className="h-5 w-5" />
-                </button>
+                </motion.button>
               </div>
 
               <div className="my-5">
                 <div className="rounded-2xl bg-slate-950 border border-slate-800 p-4 flex items-center justify-between mb-4">
                   <div>
                     <span className="text-xs text-slate-400 block">Total Harus Dibayar</span>
-                    <span className="text-2xl font-extrabold text-amber-400">
-                      {formatRupiah(totalAmount)}
+                    <span className="text-2xl font-extrabold text-amber-400 tabular-nums">
+                      {formatRupiah(animatedTotal)}
                     </span>
                   </div>
                   <div className="text-right text-xs text-slate-400">
@@ -756,7 +886,8 @@ export const PosView: React.FC<PosViewProps> = ({
                       { method: 'Transfer', icon: Building2 },
                     ] as const
                   ).map(({ method, icon: Icon }) => (
-                    <button
+                    <motion.button
+                      whileTap={tapScale}
                       key={method}
                       type="button"
                       onClick={() => {
@@ -771,7 +902,7 @@ export const PosView: React.FC<PosViewProps> = ({
                     >
                       <Icon className="h-5 w-5" />
                       <span>{method}</span>
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
 
@@ -794,20 +925,21 @@ export const PosView: React.FC<PosViewProps> = ({
                         { label: 'Rp 150.000', val: 150000 },
                         { label: 'Rp 200.000', val: 200000 },
                       ].map((btn) => (
-                        <button
+                        <motion.button
+                          whileTap={tapScale}
                           key={btn.label}
                           type="button"
                           onClick={() => setCashReceived(btn.val)}
                           className="rounded-xl border border-slate-800 bg-slate-900 hover:border-amber-500/50 px-3 py-1.5 text-xs font-semibold text-slate-300 transition"
                         >
                           {btn.label}
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-sm">
                       <span className="text-slate-400">Uang Kembalian:</span>
-                      <span className="font-extrabold text-emerald-400">
-                        {formatRupiah(Math.max(0, cashReceived - totalAmount))}
+                      <span className="font-extrabold text-emerald-400 tabular-nums">
+                        {formatRupiah(animatedChange)}
                       </span>
                     </div>
                   </div>
@@ -833,21 +965,24 @@ export const PosView: React.FC<PosViewProps> = ({
               </div>
 
               <div className="flex gap-3">
-                <button
+                <motion.button
+                  whileTap={tapScale}
                   type="button"
                   onClick={() => setIsCheckoutOpen(false)}
                   className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3.5 text-xs font-bold text-slate-300"
                 >
                   Kembali
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={tapScale}
                   type="button"
                   onClick={handleFinalizeOrder}
                   className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 py-3.5 font-extrabold text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition"
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>Selesaikan & Tampilkan Struk</span>
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>

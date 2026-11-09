@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import {
   Coffee,
   LayoutGrid,
   PackageSearch,
   Wallet,
   Receipt,
-  ShieldCheck,
-  UserCheck,
   KeyRound,
   Sparkles,
   Bot,
@@ -37,6 +35,7 @@ import { ReceiptsSettingsView } from './components/ReceiptsSettingsView';
 import { LoginModal } from './components/LoginModal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { AiAgentDrawer } from './components/AiAgentDrawer';
+import { pageVariants, springSnappy, tapScale, hoverLift } from './lib/motion';
 
 type ActiveTab = 'pos' | 'inventory' | 'finance' | 'receipts';
 
@@ -112,7 +111,15 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState<boolean>(false);
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Transaction | null>(null);
+
+  const handleAskAi = (prompt?: string) => {
+    if (prompt && prompt.trim()) {
+      setAiInitialPrompt(prompt.trim());
+    }
+    setIsAiDrawerOpen(true);
+  };
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [clock, setClock] = useState<string>('');
   const [serverConnected, setServerConnected] = useState<boolean>(true);
@@ -432,6 +439,7 @@ export function App() {
   const isAdmin = currentUser.role === 'admin';
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 flex flex-col md:flex-row select-none">
       {/* Left Tablet Dock Navigation */}
       <aside className="w-full md:w-24 lg:w-64 shrink-0 border-b md:border-b-0 md:border-r border-slate-800/90 bg-slate-900/90 backdrop-blur-xl p-3 flex md:flex-col justify-between z-20">
@@ -439,9 +447,13 @@ export function App() {
         <div>
           <div className="flex items-center justify-between md:justify-start gap-3 px-2 py-1.5">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-slate-950 shadow-lg shadow-amber-500/20">
+              <motion.div
+                whileHover={{ rotate: -6, scale: 1.05 }}
+                whileTap={tapScale}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              >
                 <Coffee className="h-6 w-6 stroke-[2.5]" />
-              </div>
+              </motion.div>
               <div className="hidden lg:block">
                 <h1 className="font-extrabold text-sm tracking-tight text-white leading-none">
                   KopiNusa <span className="text-amber-400">POS</span>
@@ -452,15 +464,27 @@ export function App() {
               </div>
             </div>
 
-            {/* Mobile/Compact Role Switch Button */}
-            <button
-              type="button"
-              onClick={() => setIsLoginModalOpen(true)}
-              className="md:hidden rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-amber-300 flex items-center gap-1.5"
-            >
-              <KeyRound className="h-3.5 w-3.5" />
-              <span>{isAdmin ? 'Server Admin' : 'Client Kasir'}</span>
-            </button>
+            {/* Mobile/Compact Quick Actions */}
+            <div className="flex md:hidden items-center gap-1.5">
+              <motion.button
+                whileTap={tapScale}
+                type="button"
+                onClick={() => handleAskAi()}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1.5 text-xs font-extrabold text-slate-950 flex items-center gap-1 shadow-md shadow-amber-500/20"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                <span>Tanya AI</span>
+              </motion.button>
+              <motion.button
+                whileTap={tapScale}
+                type="button"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-amber-300 flex items-center gap-1.5"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                <span>{isAdmin ? 'Server Admin' : 'Client Kasir'}</span>
+              </motion.button>
+            </div>
           </div>
 
           {/* Navigation Items */}
@@ -497,18 +521,33 @@ export function App() {
               const Icon = nav.icon;
               const active = activeTab === nav.id;
               return (
-                <button
+                <motion.button
                   key={nav.id}
                   type="button"
+                  whileHover={{ x: 2 }}
+                  whileTap={tapScale}
                   onClick={() => setActiveTab(nav.id)}
-                  className={`relative group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-all active:scale-95 ${
+                  className={`relative group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors ${
                     active
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-lg shadow-amber-500/20 font-extrabold'
+                      ? 'text-slate-950 font-extrabold'
                       : 'text-slate-400 hover:bg-slate-800/70 hover:text-white font-semibold'
                   }`}
                 >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  <div className="hidden lg:block min-w-0">
+                  {active && (
+                    <motion.span
+                      layoutId="activeNavTab"
+                      transition={springSnappy}
+                      className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 shadow-lg shadow-amber-500/20"
+                    />
+                  )}
+                  <motion.span
+                    animate={{ scale: active ? 1.08 : 1 }}
+                    transition={springSnappy}
+                    className="relative z-10 shrink-0"
+                  >
+                    <Icon className="h-5 w-5" />
+                  </motion.span>
+                  <div className="relative z-10 hidden lg:block min-w-0">
                     <div className="text-xs leading-tight truncate">
                       {nav.label}
                     </div>
@@ -520,18 +559,25 @@ export function App() {
                       {nav.sub}
                     </div>
                   </div>
-                  {'badge' in nav && nav.badge && (
-                    <span
-                      className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
-                        active
-                          ? 'bg-slate-950 text-amber-400'
-                          : 'bg-rose-500 text-white'
-                      }`}
-                    >
-                      {nav.badge}
-                    </span>
-                  )}
-                </button>
+                  <AnimatePresence>
+                    {'badge' in nav && nav.badge && (
+                      <motion.span
+                        key={nav.badge}
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.5, opacity: 0 }}
+                        transition={springSnappy}
+                        className={`relative z-10 ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
+                          active
+                            ? 'bg-slate-950 text-amber-400'
+                            : 'bg-rose-500 text-white'
+                        }`}
+                      >
+                        {nav.badge}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               );
             })}
           </nav>
@@ -540,32 +586,39 @@ export function App() {
         {/* Bottom Active User & Quick Role Switcher */}
         <div className="hidden md:flex flex-col gap-2 pt-3 border-t border-slate-800">
           {/* Quick AI Assistant Button in Sidebar */}
-          <button
+          <motion.button
+            whileHover={hoverLift}
+            whileTap={tapScale}
             type="button"
-            onClick={() => setIsAiDrawerOpen(true)}
+            onClick={() => handleAskAi()}
             className="w-full rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-indigo-500/15 hover:from-amber-500/25 hover:to-orange-500/25 p-2.5 text-left transition flex items-center gap-2.5 group"
           >
-            <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20">
+            <div className="relative h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20">
               <Bot className="h-5 w-5 stroke-[2.2]" />
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900 animate-pulse" />
             </div>
             <div className="hidden lg:block min-w-0">
               <div className="text-xs font-extrabold text-amber-300 truncate flex items-center gap-1">
-                <span>Tanya AI Flash</span>
+                <span>Opsi Tanya AI</span>
                 <Sparkles className="h-3 w-3 shrink-0" />
               </div>
               <div className="text-[10px] text-slate-400 truncate">
-                Bingung? Tanya Cloud AI
+                Analisis Stok, Omset & Kasir
               </div>
             </div>
-          </button>
+          </motion.button>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-2.5">
             <div className="flex items-center gap-2.5">
-              <div
+              <motion.div
+                key={currentUser.id}
+                initial={{ scale: 0.85, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={springSnappy}
                 className={`h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br ${currentUser.avatarColor} flex items-center justify-center font-bold text-white text-sm`}
               >
                 {currentUser.name.charAt(0)}
-              </div>
+              </motion.div>
               <div className="hidden lg:block min-w-0">
                 <div className="text-xs font-bold text-white truncate">
                   {currentUser.name}
@@ -585,7 +638,8 @@ export function App() {
             </div>
 
             <div className="mt-2.5 flex flex-col gap-1.5">
-              <button
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={() => setIsLoginModalOpen(true)}
                 className="w-full rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 py-2 px-2.5 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition"
@@ -594,10 +648,11 @@ export function App() {
                 <span className="hidden lg:inline">
                   {isAdmin ? 'Ubah PIN / Ganti Sesi' : 'Ganti Shift / Login Admin'}
                 </span>
-              </button>
+              </motion.button>
 
               {isAdmin && (
-                <button
+                <motion.button
+                  whileTap={tapScale}
                   type="button"
                   onClick={handleSwitchToClientMode}
                   className="w-full rounded-xl border border-sky-500/30 bg-sky-500/15 hover:bg-sky-500 hover:text-slate-950 py-1.5 px-2.5 text-[11px] font-extrabold text-sky-300 flex items-center justify-center gap-1.5 transition"
@@ -605,7 +660,7 @@ export function App() {
                 >
                   <Lock className="h-3 w-3 shrink-0" />
                   <span className="hidden lg:inline">Kunci ke Mode Client</span>
-                </button>
+                </motion.button>
               )}
             </div>
           </div>
@@ -644,61 +699,81 @@ export function App() {
 
           {/* Instant Role Indicator & Mode Switcher */}
           <div className="flex items-center gap-2.5">
-            <button
+            <motion.button
+              whileHover={hoverLift}
+              whileTap={tapScale}
               type="button"
-              onClick={() => setIsAiDrawerOpen(true)}
-              className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 px-3.5 py-1.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition active:scale-95"
+              onClick={() => handleAskAi()}
+              className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 px-3.5 py-1.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition"
             >
               <Bot className="h-4 w-4 stroke-[2.3]" />
               <span>Bingung? Tanya AI Flash</span>
-            </button>
+              <Sparkles className="h-3.5 w-3.5 hidden sm:inline" />
+            </motion.button>
 
-            <div className="hidden sm:flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 text-xs">
-              <button
+            <div className="hidden sm:flex items-center gap-1 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 text-xs">
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={() => {
                   if (isAdmin) {
                     handleSwitchToClientMode();
                   }
                 }}
-                className={`rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
+                className={`relative rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
                   !isAdmin
-                    ? 'bg-sky-500 text-slate-950 shadow'
+                    ? 'text-slate-950'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="Mode Client untuk Karyawan / Kasir"
               >
-                <MonitorSmartphone className="h-3.5 w-3.5" />
-                <span>Client (Karyawan)</span>
-              </button>
+                {!isAdmin && (
+                  <motion.span
+                    layoutId="roleModePill"
+                    transition={springSnappy}
+                    className="absolute inset-0 rounded-xl bg-sky-500 shadow"
+                  />
+                )}
+                <MonitorSmartphone className="relative z-10 h-3.5 w-3.5" />
+                <span className="relative z-10">Client (Karyawan)</span>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={() => {
                   if (!isAdmin) {
                     setIsLoginModalOpen(true);
                   }
                 }}
-                className={`rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
+                className={`relative rounded-xl px-2.5 py-1 font-bold flex items-center gap-1.5 transition ${
                   isAdmin
-                    ? 'bg-amber-500 text-slate-950 shadow'
+                    ? 'text-slate-950'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="Mode Server untuk Owner / Admin (Wajib PIN)"
               >
-                <Server className="h-3.5 w-3.5" />
-                <span>Server (Admin)</span>
-              </button>
+                {isAdmin && (
+                  <motion.span
+                    layoutId="roleModePill"
+                    transition={springSnappy}
+                    className="absolute inset-0 rounded-xl bg-amber-500 shadow"
+                  />
+                )}
+                <Server className="relative z-10 h-3.5 w-3.5" />
+                <span className="relative z-10">Server (Admin)</span>
+              </motion.button>
             </div>
 
-            <button
+            <motion.button
+              whileTap={tapScale}
               type="button"
               onClick={() => setIsLoginModalOpen(true)}
               className="rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-300 flex items-center gap-1.5 transition"
             >
               <KeyRound className="h-3.5 w-3.5" />
               <span>{isAdmin ? 'Ubah PIN / Akun' : 'PIN / Akun'}</span>
-            </button>
+            </motion.button>
           </div>
         </header>
 
@@ -707,10 +782,10 @@ export function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               className="h-full"
             >
               {activeTab === 'pos' && (
@@ -719,6 +794,7 @@ export function App() {
                   settings={storeSettings}
                   currentUser={currentUser}
                   onCompleteOrder={handleCompleteOrder}
+                  onAskAi={handleAskAi}
                 />
               )}
 
@@ -730,6 +806,7 @@ export function App() {
                   onDeleteItem={handleDeleteMenuItem}
                   onQuickStockChange={handleQuickStockChange}
                   onToggleAvailability={handleToggleAvailability}
+                  onAskAi={handleAskAi}
                 />
               )}
 
@@ -742,6 +819,7 @@ export function App() {
                   onSaveCashflow={handleSaveCashflow}
                   onDeleteCashflow={handleDeleteCashflow}
                   onSelectTransaction={(trx) => setSelectedReceipt(trx)}
+                  onAskAi={handleAskAi}
                 />
               )}
 
@@ -756,6 +834,7 @@ export function App() {
                   onSaveUser={handleSaveUser}
                   onDeleteUser={handleDeleteUser}
                   onResetDemoData={handleResetDemoData}
+                  onAskAi={handleAskAi}
                 />
               )}
             </motion.div>
@@ -802,23 +881,35 @@ export function App() {
         currentUser={currentUser}
         settings={storeSettings}
         onRequestAdminLogin={() => setIsLoginModalOpen(true)}
+        initialPrompt={aiInitialPrompt}
+        onClearInitialPrompt={() => setAiInitialPrompt(null)}
       />
 
       {/* Animated Toast Notification */}
       <AnimatePresence>
         {toastMsg && (
           <motion.div
+            key={toastMsg}
             initial={{ opacity: 0, y: 30, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-5 right-5 z-50 rounded-2xl border border-amber-500/40 bg-slate-900/95 backdrop-blur-md px-4 py-3 text-xs font-bold text-white shadow-2xl flex items-center gap-2.5"
+            transition={springSnappy}
+            className="fixed bottom-5 right-5 z-50 rounded-2xl border border-amber-500/40 bg-slate-900/95 backdrop-blur-md px-4 py-3 text-xs font-bold text-white shadow-2xl flex items-center gap-2.5 overflow-hidden"
           >
             <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
             <span>{toastMsg}</span>
+            <motion.div
+              initial={{ scaleX: 1 }}
+              animate={{ scaleX: 0 }}
+              transition={{ duration: 3.1, ease: 'linear' }}
+              style={{ transformOrigin: 'left' }}
+              className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-400 to-orange-500"
+            />
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+    </MotionConfig>
   );
 }
 export default App;

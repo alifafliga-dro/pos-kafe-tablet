@@ -10,11 +10,21 @@ import {
   AlertTriangle,
   XCircle,
   PackageCheck,
-  ShieldAlert,
   X,
+  Bot,
+  Sparkles,
 } from 'lucide-react';
 import { MenuItem, MenuCategory, UserAccount } from '../types';
 import { MENU_CATEGORIES, formatRupiah } from '../data/initialData';
+import {
+  springSnappy,
+  springSoft,
+  tapScale,
+  hoverLift,
+  backdropVariants,
+  modalPanelVariants,
+  useAnimatedNumber,
+} from '../lib/motion';
 
 interface InventoryViewProps {
   menuItems: MenuItem[];
@@ -23,6 +33,7 @@ interface InventoryViewProps {
   onDeleteItem: (id: string) => void;
   onQuickStockChange: (id: string, delta: number) => void;
   onToggleAvailability: (id: string) => void;
+  onAskAi?: (prompt?: string) => void;
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
@@ -32,6 +43,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onDeleteItem,
   onQuickStockChange,
   onToggleAvailability,
+  onAskAi,
 }) => {
   const isAdmin = currentUser.role === 'admin';
   const [search, setSearch] = useState('');
@@ -61,6 +73,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     (m) => m.isAvailable && m.stock > 0 && m.stock <= m.minStock
   ).length;
   const totalOut = menuItems.filter((m) => !m.isAvailable || m.stock <= 0).length;
+
+  const animAvailable = useAnimatedNumber(totalAvailable, 0.35);
+  const animLow = useAnimatedNumber(totalLow, 0.35);
+  const animOut = useAnimatedNumber(totalOut, 0.35);
 
   const openAddModal = () => {
     if (!isAdmin) return;
@@ -121,21 +137,41 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </p>
             </div>
           </div>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="shrink-0 rounded-2xl bg-amber-500 hover:bg-amber-400 px-4 py-2.5 text-xs font-extrabold text-slate-950 flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Tambah Barang</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {onAskAi && (
+              <motion.button
+                whileHover={hoverLift}
+                whileTap={tapScale}
+                type="button"
+                onClick={() => onAskAi('Barang apa yang stoknya tipis atau habis?')}
+                className="rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-xs font-extrabold text-amber-300 flex items-center gap-1.5 transition"
+                title="Tanya AI Analisis Stok & Prioritas Restock"
+              >
+                <Bot className="h-4 w-4 text-amber-400" />
+                <span className="hidden sm:inline">Tanya AI Stok</span>
+                <Sparkles className="h-3 w-3 text-amber-400" />
+              </motion.button>
+            )}
+            {isAdmin && (
+              <motion.button
+                whileHover={hoverLift}
+                whileTap={tapScale}
+                type="button"
+                onClick={openAddModal}
+                className="rounded-2xl bg-amber-500 hover:bg-amber-400 px-4 py-2.5 text-xs font-extrabold text-slate-950 flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Tambah Barang</span>
+              </motion.button>
+            )}
+          </div>
         </div>
 
         {/* KPI Pills */}
         <div className="lg:col-span-7 grid grid-cols-3 gap-3">
-          <button
+          <motion.button
+            whileHover={hoverLift}
+            whileTap={tapScale}
             type="button"
             onClick={() => setStatusFilter(statusFilter === 'available' ? 'all' : 'available')}
             className={`rounded-3xl border p-4 text-left transition ${
@@ -148,12 +184,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <span>Tersedia Siap Jual</span>
               <CheckCircle2 className="h-4 w-4" />
             </div>
-            <div className="text-2xl font-extrabold text-white mt-1">
-              {totalAvailable} <span className="text-xs font-normal text-slate-400">Menu</span>
+            <div className="text-2xl font-extrabold text-white mt-1 tabular-nums">
+              {animAvailable} <span className="text-xs font-normal text-slate-400">Menu</span>
             </div>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
+            whileHover={hoverLift}
+            whileTap={tapScale}
             type="button"
             onClick={() => setStatusFilter(statusFilter === 'low' ? 'all' : 'low')}
             className={`rounded-3xl border p-4 text-left transition ${
@@ -166,12 +204,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <span>Stok Menipis</span>
               <AlertTriangle className="h-4 w-4" />
             </div>
-            <div className="text-2xl font-extrabold text-white mt-1">
-              {totalLow} <span className="text-xs font-normal text-slate-400">Menu</span>
+            <div className="text-2xl font-extrabold text-white mt-1 tabular-nums">
+              {animLow} <span className="text-xs font-normal text-slate-400">Menu</span>
             </div>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
+            whileHover={hoverLift}
+            whileTap={tapScale}
             type="button"
             onClick={() => setStatusFilter(statusFilter === 'out' ? 'all' : 'out')}
             className={`rounded-3xl border p-4 text-left transition ${
@@ -184,10 +224,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <span>Stok Habis / Nonaktif</span>
               <XCircle className="h-4 w-4" />
             </div>
-            <div className="text-2xl font-extrabold text-white mt-1">
-              {totalOut} <span className="text-xs font-normal text-slate-400">Menu</span>
+            <div className="text-2xl font-extrabold text-white mt-1 tabular-nums">
+              {animOut} <span className="text-xs font-normal text-slate-400">Menu</span>
             </div>
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -206,27 +246,38 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto">
-            {['Semua', ...MENU_CATEGORIES].map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategoryFilter(cat)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                  categoryFilter === cat
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            {['Semua', ...MENU_CATEGORIES].map((cat) => {
+              const active = categoryFilter === cat;
+              return (
+                <motion.button
+                  key={cat}
+                  whileTap={tapScale}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`relative rounded-xl px-3 py-2 text-xs font-bold transition ${
+                    active
+                      ? 'text-slate-950'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="invCategoryPill"
+                      transition={springSnappy}
+                      className="absolute inset-0 rounded-xl bg-amber-500 shadow"
+                    />
+                  )}
+                  <span className="relative z-10">{cat}</span>
+                </motion.button>
+              );
+            })}
           </div>
         </div>
 
         {/* Inventory Table */}
         <div className="flex-1 overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-950/60">
           <table className="w-full text-left border-collapse text-xs">
-            <thead className="sticky top-0 bg-slate-900/95 backdrop-blur text-slate-400 border-b border-slate-800">
+            <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur text-slate-400 border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4">Barang / Menu</th>
                 <th className="py-3 px-3">Kategori</th>
@@ -240,126 +291,143 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {filtered.map((item) => {
-                const isOut = !item.isAvailable || item.stock <= 0;
-                const isLow = !isOut && item.stock <= item.minStock;
-                return (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-slate-900/50 transition-colors"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{item.emoji}</span>
-                        <div>
-                          <div className="font-bold text-white text-sm">{item.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            {item.sku} • Min. Stok: {item.minStock} {item.unit}
+              <AnimatePresence initial={false}>
+                {filtered.map((item) => {
+                  const isOut = !item.isAvailable || item.stock <= 0;
+                  const isLow = !isOut && item.stock <= item.minStock;
+                  return (
+                    <motion.tr
+                      layout
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={springSoft}
+                      key={item.id}
+                      className="hover:bg-slate-900/50 transition-colors"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{item.emoji}</span>
+                          <div>
+                            <div className="font-bold text-white text-sm">{item.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">
+                              {item.sku} • Min. Stok: {item.minStock} {item.unit}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-slate-300">{item.category}</td>
-                    <td className="py-3 px-3 font-bold text-amber-400">
-                      {formatRupiah(item.price)}
-                    </td>
-                    {isAdmin && (
-                      <td className="py-3 px-3 text-slate-400">
-                        {formatRupiah(item.costPrice)}
                       </td>
-                    )}
-                    <td className="py-3 px-3">
-                      <span
-                        className={`font-extrabold text-sm ${
-                          isOut
-                            ? 'text-rose-400'
-                            : isLow
-                            ? 'text-amber-400'
-                            : 'text-emerald-400'
-                        }`}
-                      >
-                        {item.stock} {item.unit}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      {isOut ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-1 text-[11px] font-bold text-rose-300">
-                          <XCircle className="h-3.5 w-3.5" /> Habis / Nonaktif
-                        </span>
-                      ) : isLow ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 text-[11px] font-bold text-amber-300">
-                          <AlertTriangle className="h-3.5 w-3.5" /> Stok Menipis
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Tersedia
-                        </span>
+                      <td className="py-3 px-3 text-slate-300">{item.category}</td>
+                      <td className="py-3 px-3 font-bold text-amber-400">
+                        {formatRupiah(item.price)}
+                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-3 text-slate-400">
+                          {formatRupiah(item.costPrice)}
+                        </td>
                       )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      {isAdmin ? (
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => onQuickStockChange(item.id, -1)}
-                            className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2 py-1 text-slate-300 font-bold"
-                            title="Kurangi 1"
-                          >
-                            -1
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onQuickStockChange(item.id, 1)}
-                            className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2 py-1 text-emerald-300 font-bold"
-                            title="Tambah 1"
-                          >
-                            +1
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onQuickStockChange(item.id, 10)}
-                            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 text-emerald-300 font-bold"
-                            title="Restock +10"
-                          >
-                            +10
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onToggleAvailability(item.id)}
-                            className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300"
-                          >
-                            {item.isAvailable ? 'Set Habis' : 'Aktifkan'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(item)}
-                            className="rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 p-1.5 text-amber-300 transition"
-                            title="Edit Detail Barang"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Hapus ${item.name} dari daftar menu?`)) {
-                                onDeleteItem(item.id);
-                              }
-                            }}
-                            className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 p-1.5 text-rose-300 transition"
-                            title="Hapus Barang"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1 text-[11px] text-slate-500">
-                          <Lock className="h-3 w-3 text-slate-500" /> Terkunci (Khusus Admin)
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="py-3 px-3">
+                        <motion.span
+                          key={item.stock}
+                          initial={{ scale: 0.85 }}
+                          animate={{ scale: 1 }}
+                          transition={springSnappy}
+                          className={`inline-block font-extrabold text-sm tabular-nums ${
+                            isOut
+                              ? 'text-rose-400'
+                              : isLow
+                              ? 'text-amber-400'
+                              : 'text-emerald-400'
+                          }`}
+                        >
+                          {item.stock} {item.unit}
+                        </motion.span>
+                      </td>
+                      <td className="py-3 px-3">
+                        {isOut ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-1 text-[11px] font-bold text-rose-300">
+                            <XCircle className="h-3.5 w-3.5" /> Habis / Nonaktif
+                          </span>
+                        ) : isLow ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 text-[11px] font-bold text-amber-300">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Stok Menipis
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Tersedia
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {isAdmin ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => onQuickStockChange(item.id, -1)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2 py-1 text-slate-300 font-bold"
+                              title="Kurangi 1"
+                            >
+                              -1
+                            </motion.button>
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => onQuickStockChange(item.id, 1)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2 py-1 text-emerald-300 font-bold"
+                              title="Tambah 1"
+                            >
+                              +1
+                            </motion.button>
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => onQuickStockChange(item.id, 10)}
+                              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 text-emerald-300 font-bold"
+                              title="Restock +10"
+                            >
+                              +10
+                            </motion.button>
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => onToggleAvailability(item.id)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300"
+                            >
+                              {item.isAvailable ? 'Set Habis' : 'Aktifkan'}
+                            </motion.button>
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              className="rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 p-1.5 text-amber-300 transition"
+                              title="Edit Detail Barang"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </motion.button>
+                            <motion.button
+                              whileTap={tapScale}
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Hapus ${item.name} dari daftar menu?`)) {
+                                  onDeleteItem(item.id);
+                                }
+                              }}
+                              className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 p-1.5 text-rose-300 transition"
+                              title="Hapus Barang"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </motion.button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1 text-[11px] text-slate-500">
+                            <Lock className="h-3 w-3 text-slate-500" /> Terkunci (Khusus Admin)
+                          </span>
+                        )}
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
             </tbody>
           </table>
         </div>
@@ -369,15 +437,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       <AnimatePresence>
         {isAdmin && isModalOpen && editingItem && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4"
           >
             <motion.form
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              variants={modalPanelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               onSubmit={handleFormSubmit}
               className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4 text-xs"
             >

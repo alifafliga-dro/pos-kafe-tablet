@@ -22,6 +22,12 @@ import {
   CartItem,
 } from '../types';
 import { formatRupiah, formatDateTime } from '../data/initialData';
+import {
+  springSnappy,
+  tapScale,
+  backdropVariants,
+  modalPanelVariants,
+} from '../lib/motion';
 
 interface ReceiptModalProps {
   transaction: Transaction | null;
@@ -66,8 +72,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   }, [transaction]);
 
-  if (!transaction) return null;
-
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   const taxAmount = Math.round((afterDiscount * settings.taxPercent) / 100);
@@ -89,7 +93,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   };
 
   const handleSaveEdit = () => {
-    if (!isAdmin || items.length === 0) return;
+    if (!isAdmin || items.length === 0 || !transaction) return;
     const updated: Transaction = {
       ...transaction,
       customerName: customerName.trim() || 'Pelanggan Umum',
@@ -119,16 +123,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   return (
     <AnimatePresence>
+      {transaction && (
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        key={transaction.id}
+        variants={backdropVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto"
       >
         <motion.div
-          initial={{ scale: 0.94, opacity: 0, y: 15 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.94, opacity: 0, y: 15 }}
+          variants={modalPanelVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
           className="relative w-full max-w-4xl rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 max-h-[92vh]"
         >
           {/* Left: Thermal Receipt Paper Preview */}
@@ -139,7 +147,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             </div>
 
             {/* Thermal Paper Card */}
-            <div
+            <motion.div
+              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={springSnappy}
               id="printable-receipt"
               className="w-full max-w-[330px] rounded-xl bg-white text-slate-900 p-5 shadow-xl font-mono text-xs leading-relaxed"
             >
@@ -287,7 +298,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   </p>
                 )}
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Right: Actions & Admin Editor */}
@@ -517,25 +528,29 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
             {/* Bottom Print & Close Buttons */}
             <div className="mt-6 flex gap-3 pt-4 border-t border-slate-800">
-              <button
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={tapScale}
                 type="button"
                 onClick={handlePrint}
-                className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 py-3.5 font-bold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 active:scale-98 transition"
+                className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 py-3.5 font-bold text-slate-950 shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition"
               >
                 <Printer className="h-5 w-5" />
                 <span>Cetak Struk Thermal</span>
-              </button>
-              <button
+              </motion.button>
+              <motion.button
+                whileTap={tapScale}
                 type="button"
                 onClick={onClose}
                 className="rounded-2xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-6 py-3.5 font-bold text-slate-200 transition"
               >
                 Tutup
-              </button>
+              </motion.button>
             </div>
           </div>
         </motion.div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 };
