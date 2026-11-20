@@ -73,7 +73,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   }, [transaction]);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  const validDiscount = Math.min(Math.max(0, discountAmount), subtotal);
+  const afterDiscount = Math.max(0, subtotal - validDiscount);
   const taxAmount = Math.round((afterDiscount * settings.taxPercent) / 100);
   const serviceAmount = Math.round((afterDiscount * settings.servicePercent) / 100);
   const totalAmount = afterDiscount + taxAmount + serviceAmount;
@@ -102,7 +103,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       paymentMethod,
       items,
       subtotal,
-      discountAmount,
+      discountAmount: validDiscount,
       taxAmount,
       serviceAmount,
       totalAmount,

@@ -66,6 +66,12 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
   const [searchTrx, setSearchTrx] = useState('');
   const [savedBanner, setSavedBanner] = useState(false);
 
+  const updateSettingField = (partial: Partial<StoreSettings>) => {
+    onUpdateSettings({ ...settings, ...partial });
+    setSavedBanner(true);
+    setTimeout(() => setSavedBanner(false), 2000);
+  };
+
   // User form state for Admin
   const [newName, setNewName] = useState('');
   const [newUsername, setNewUsername] = useState('');
@@ -398,10 +404,9 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                   <input
                     type="text"
                     value={settings.storeName}
-                    onChange={(e) => {
-                      onUpdateSettings({ ...settings, storeName: e.target.value });
-                      setSavedBanner(true);
-                    }}
+                    onChange={(e) =>
+                      updateSettingField({ storeName: e.target.value })
+                    }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white font-bold"
                   />
                 </div>
@@ -412,10 +417,9 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                   <input
                     type="text"
                     value={settings.tagline}
-                    onChange={(e) => {
-                      onUpdateSettings({ ...settings, tagline: e.target.value });
-                      setSavedBanner(true);
-                    }}
+                    onChange={(e) =>
+                      updateSettingField({ tagline: e.target.value })
+                    }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white"
                   />
                 </div>
@@ -430,7 +434,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.address}
                     onChange={(e) =>
-                      onUpdateSettings({ ...settings, address: e.target.value })
+                      updateSettingField({ address: e.target.value })
                     }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white"
                   />
@@ -443,7 +447,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.phone}
                     onChange={(e) =>
-                      onUpdateSettings({ ...settings, phone: e.target.value })
+                      updateSettingField({ phone: e.target.value })
                     }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white"
                   />
@@ -461,8 +465,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     max={50}
                     value={settings.taxPercent}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         taxPercent: Number(e.target.value) || 0,
                       })
                     }
@@ -479,8 +482,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     max={50}
                     value={settings.servicePercent}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         servicePercent: Number(e.target.value) || 0,
                       })
                     }
@@ -495,7 +497,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.wifiName}
                     onChange={(e) =>
-                      onUpdateSettings({ ...settings, wifiName: e.target.value })
+                      updateSettingField({ wifiName: e.target.value })
                     }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white"
                   />
@@ -508,8 +510,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.wifiPassword}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         wifiPassword: e.target.value,
                       })
                     }
@@ -527,8 +528,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.receiptHeaderNote}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         receiptHeaderNote: e.target.value,
                       })
                     }
@@ -543,8 +543,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="text"
                     value={settings.receiptFooterNote}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         receiptFooterNote: e.target.value,
                       })
                     }
@@ -562,8 +561,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="checkbox"
                     checked={settings.showWifiOnReceipt}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         showWifiOnReceipt: e.target.checked,
                       })
                     }
@@ -578,8 +576,7 @@ export const ReceiptsSettingsView: React.FC<ReceiptsSettingsViewProps> = ({
                     type="checkbox"
                     checked={settings.allowCashierAddExpense}
                     onChange={(e) =>
-                      onUpdateSettings({
-                        ...settings,
+                      updateSettingField({
                         allowCashierAddExpense: e.target.checked,
                       })
                     }

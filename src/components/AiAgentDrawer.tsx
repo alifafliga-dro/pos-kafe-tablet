@@ -56,18 +56,24 @@ interface AiAgentDrawerProps {
 export type GeminiModelId = string;
 
 // Aliases "-latest" always point to Google's newest Flash models, so they don't break
-// when older versions (e.g. gemini-2.0-flash, shut down June 2026) are retired.
+// when older versions (e.g. gemini-2.0-flash) are retired.
 const DEFAULT_GEMINI_MODEL: GeminiModelId = 'gemini-flash-latest';
 const FALLBACK_GEMINI_MODELS: GeminiModelId[] = [
   'gemini-flash-latest',
   'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
 ];
 // Retired models: saved selections of these are migrated automatically to the default.
 const RETIRED_GEMINI_MODELS = [
   'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
   'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+  'gemini-2.0-flash-exp',
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
   'gemini-pro',
@@ -75,6 +81,11 @@ const RETIRED_GEMINI_MODELS = [
 const GEMINI_DIRECT_BASE = 'https://generativelanguage.googleapis.com';
 const GEMINI_PROXY_BASE = '/api/gemini';
 const GEMINI_TIMEOUT_MS = 25000;
+
+let proxyAvailability: 'unknown' | 'available' | 'unavailable' =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')
+    ? 'unavailable'
+    : 'unknown';
 
 const loadSavedModel = (): GeminiModelId => {
   const saved = localStorage.getItem('kopinusa_gemini_model_v1');
@@ -118,24 +129,46 @@ const explainGeminiError = (status: number, rawMessage: string): GeminiError => 
   return makeGeminiError(rawMessage || `Error HTTP ${status}`, status);
 };
 
-// Fetch via local IPv4 Vite proxy first; if no proxy exists (static hosting), call Google directly.
+// Fetch via local IPv4 Vite proxy when available; on static hosts (GitHub Pages), call Google directly.
 const geminiFetch = async (
   pathWithQuery: string,
   init: RequestInit,
   signal: AbortSignal
 ): Promise<Response> => {
-  try {
-    const res = await fetch(`${GEMINI_PROXY_BASE}${pathWithQuery}`, { ...init, signal });
-    const contentType = res.headers.get('content-type') || '';
-    // Static hosts (GitHub Pages, Netlify, etc.) answer with HTML 404/405 — not our proxy.
-    if (!contentType.includes('application/json')) {
-      throw new Error('Proxy tidak tersedia');
+  if (proxyAvailability !== 'unavailable') {
+    try {
+      const res = await fetch(`${GEMINI_PROXY_BASE}${pathWithQuery}`, { ...init, signal });
+      const contentType = res.headers.get('content-type') || '';
+      // Static hosts (GitHub Pages, Netlify, etc.) answer with HTML 404/405 — not our proxy.
+      if (!contentType.includes('application/json')) {
+        proxyAvailability = 'unavailable';
+        throw new Error('Proxy tidak tersedia');
+      }
+      proxyAvailability = 'available';
+      return res;
+    } catch (err: any) {
+      if (signal.aborted) throw err;
+      proxyAvailability = 'unavailable';
     }
-    return res;
-  } catch (err: any) {
-    if (signal.aborted) throw err;
-    return fetch(`${GEMINI_DIRECT_BASE}${pathWithQuery}`, { ...init, signal });
   }
+  return fetch(`${GEMINI_DIRECT_BASE}${pathWithQuery}`, { ...init, signal });
+};
+
+const extractGeminiReplyText = (data: any): string => {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts)) {
+    const text = parts
+      .filter((p: any) => !p?.thought && typeof p?.text === 'string')
+      .map((p: any) => p.text)
+      .join('')
+      .trim();
+    if (text) return text;
+  }
+  const blockReason = data?.promptFeedback?.blockReason;
+  if (blockReason) {
+    return `Permintaan diblokir oleh filter keamanan Gemini (${blockReason}).`;
+  }
+  return '';
 };
 
 // Ask Google which Flash models are actually available for this API key.
@@ -157,7 +190,9 @@ const discoverFlashModels = async (key: string, signal: AbortSignal): Promise<Ge
       .map((m: any) => String(m.name || '').replace(/^models\//, ''))
       .filter(
         (n: string) =>
-          n.includes('flash') && !/(image|tts|audio|live|embedding|thinking-exp)/.test(n)
+          n.includes('flash') &&
+          !RETIRED_GEMINI_MODELS.includes(n) &&
+          !/(image|tts|audio|live|embedding|thinking-exp|computer-use|robotics|customtools|gemini-2\.0-)/.test(n)
       );
     const score = (n: string) =>
       (n.endsWith('-latest') ? 1000 : 0) +
@@ -252,12 +287,14 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
   const buildWelcomeMessage = (): ChatMessage => ({
     id: 'welcome-1',
     role: 'assistant',
-    content: `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent (Google Gemini Flash Cloud)**.\n\nPilih **Opsi Tanya AI** di bawah atau ketik langsung pertanyaan seputar stok barang, analisis omset & laba, rekomendasi paket menu, maupun panduan kasir!`,
+    content: apiKey
+      ? `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent (Google Gemini Flash Cloud)**.\n\nPilih **Opsi Tanya AI** di bawah atau ketik langsung pertanyaan seputar stok barang, analisis omset & laba, rekomendasi paket menu, maupun panduan kasir!`
+      : `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent**.\n\nSaat ini berjalan di **Mode Lokal Pintar**. Untuk terhubung ke **Google Gemini Flash Gratis**, klik tombol **Hubungkan Gemini Gratis** di atas (khusus Admin) dan masukkan API Key dari Google AI Studio.`,
     timestamp: new Date().toLocaleTimeString('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
     }),
-    source: 'Gemini Flash Cloud Ready',
+    source: apiKey ? 'Gemini Flash Cloud Ready' : 'Smart POS Lokal (Belum Pakai API Key)',
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [buildWelcomeMessage()]);
@@ -313,10 +350,22 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     e.preventDefault();
     if (!isAdmin) return;
     const cleaned = sanitizeKey(tempKey);
+    if (cleaned && (!cleaned.startsWith('AIza') || cleaned.length < 30)) {
+      setTestStatus({
+        type: 'error',
+        message: 'Format API Key tidak valid. Pastikan dimulai dengan "AIza..." dari Google AI Studio.',
+      });
+      return;
+    }
     setTempKey(cleaned);
     setApiKey(cleaned);
-    localStorage.setItem(GEMINI_KEY_STORAGE, cleaned);
+    if (cleaned) {
+      localStorage.setItem(GEMINI_KEY_STORAGE, cleaned);
+    } else {
+      localStorage.removeItem(GEMINI_KEY_STORAGE);
+    }
     localStorage.setItem(GEMINI_MODEL_STORAGE, selectedModel);
+    setTestStatus({ type: 'idle', message: '' });
     setKeySavedToast(true);
     setTimeout(() => setKeySavedToast(false), 2500);
     setShowKeyConfig(false);
@@ -327,7 +376,8 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     keyToUse: string,
     promptText: string,
     systemInstruction: string,
-    priorMessages: ChatMessage[]
+    priorMessages: ChatMessage[],
+    externalAbort?: AbortController
   ): Promise<{ replyText: string; usedModel: string }> => {
     const cleanKey = sanitizeKey(keyToUse);
 
@@ -358,39 +408,63 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
       alternatingHistory.pop();
     }
 
+    const mainAbort = externalAbort || new AbortController();
+    abortControllerRef.current = mainAbort;
+
+    let liveDiscovered = discoveredModels;
+    if (liveDiscovered.length === 0 && cleanKey.startsWith('AIza')) {
+      const discoverCtrl = new AbortController();
+      const onMainAbort = () => discoverCtrl.abort();
+      mainAbort.signal.addEventListener('abort', onMainAbort);
+      const discoverTimer = setTimeout(() => discoverCtrl.abort(), 5000);
+      try {
+        const found = await discoverFlashModels(cleanKey, discoverCtrl.signal);
+        if (found.length > 0) {
+          liveDiscovered = found;
+          setDiscoveredModels(found);
+        }
+      } finally {
+        clearTimeout(discoverTimer);
+        mainAbort.signal.removeEventListener('abort', onMainAbort);
+      }
+    }
+
     const candidateModels: GeminiModelId[] = Array.from(
       new Set<GeminiModelId>([
         selectedModel,
-        ...discoveredModels,
+        ...liveDiscovered,
         ...FALLBACK_GEMINI_MODELS,
       ])
-    ).slice(0, 3);
+    )
+      .filter((m) => m && !RETIRED_GEMINI_MODELS.includes(m))
+      .slice(0, 6);
 
     let firstError = '';
-    const mainAbort = new AbortController();
-    abortControllerRef.current = mainAbort;
 
     const payloadBody = JSON.stringify({
+      system_instruction: {
+        parts: [{ text: systemInstruction }],
+      },
       contents: [
         ...alternatingHistory.slice(-4),
         {
           role: 'user',
           parts: [
             {
-              text: `[KONTEKS KASIR REAL-TIME]\n${systemInstruction}\n\n[PERTANYAAN PENGGUNA]\n${promptText}`,
+              text: promptText,
             },
           ],
         },
       ],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 550,
+        maxOutputTokens: 2048,
       },
     });
 
     for (const modelId of candidateModels) {
       if (mainAbort.signal.aborted) {
-        throw new Error('Permintaan dibatalkan oleh pengguna.');
+        throw new Error('Dihentikan');
       }
 
       const timeoutCtrl = new AbortController();
@@ -411,9 +485,13 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
 
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
-          const text =
-            data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-            'Maaf, tidak ada respons teks dari Gemini Cloud.';
+          const text = extractGeminiReplyText(data);
+          if (!text) {
+            if (!firstError) {
+              firstError = `Model ${modelId} mengembalikan respons kosong.`;
+            }
+            continue;
+          }
           if (modelId !== selectedModel) {
             setSelectedModel(modelId);
             localStorage.setItem(GEMINI_MODEL_STORAGE, modelId);
@@ -473,8 +551,9 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
       );
       setApiKey(cleaned);
       setTempKey(cleaned);
+      setSelectedModel(res.usedModel);
       localStorage.setItem(GEMINI_KEY_STORAGE, cleaned);
-      localStorage.setItem(GEMINI_MODEL_STORAGE, selectedModel);
+      localStorage.setItem(GEMINI_MODEL_STORAGE, res.usedModel);
       setTestStatus({
         type: 'success',
         message: `✓ Terhubung ke ${res.usedModel}! API Key otomatis disimpan.`,
@@ -789,16 +868,21 @@ ${menuSummary}
     setIsLoading(true);
 
     // If a valid Google API Key (AIza...) is configured, try Google Gemini Cloud API first;
-    // otherwise or on any cloud error, seamlessly answer using the Automatic Smart POS Engine
+    // otherwise or on any cloud error, answer using the Automatic Smart POS Engine with diagnostic reason
     if (activeKey && activeKey.startsWith('AIza') && activeKey.length >= 30) {
+      const reqAbort = new AbortController();
+      abortControllerRef.current = reqAbort;
       try {
         const systemInstruction = buildPosContext();
         const { replyText, usedModel } = await callGeminiCloud(
           activeKey,
           textToSend,
           systemInstruction,
-          priorMessages
+          priorMessages,
+          reqAbort
         );
+
+        if (reqAbort.signal.aborted) return;
 
         setMessages((prev) => [
           ...prev,
@@ -814,7 +898,7 @@ ${menuSummary}
           },
         ]);
       } catch (err: any) {
-        if (err?.message === 'Dihentikan') {
+        if (reqAbort.signal.aborted || err?.message === 'Dihentikan') {
           return;
         }
         const fallback = generateSmartLocalFallback(textToSend);
@@ -823,17 +907,19 @@ ${menuSummary}
           {
             id: `ai-${Date.now()}`,
             role: 'assistant',
-            content: fallback,
+            content: `⚠️ **Gemini Cloud gagal terhubung:** ${err?.message || 'Koneksi ke Google AI gagal.'}\n\n*Berikut jawaban dari Smart POS Engine lokal:*\n\n${fallback}`,
             timestamp: new Date().toLocaleTimeString('id-ID', {
               hour: '2-digit',
               minute: '2-digit',
             }),
-            source: 'AI Kasir Otomatis (Real-Time)',
+            source: 'Smart POS Engine (Fallback)',
           },
         ]);
       } finally {
-        setIsLoading(false);
-        setLastPendingPrompt('');
+        if (abortControllerRef.current === reqAbort) {
+          setIsLoading(false);
+          setLastPendingPrompt('');
+        }
       }
     } else {
       // Instant automatic chat response (~200ms)
@@ -996,8 +1082,8 @@ ${menuSummary}
                     {apiKey
                       ? '✓ Terhubung ke Google Gemini Flash Cloud'
                       : isAdmin
-                      ? 'Mode Pintar Aktif • Klik ⚙️ untuk API Key Cloud'
-                      : 'Asisten Siap Membantu • Real-Time Data Kasir'}
+                      ? 'Mode Lokal • Klik ⚙️ untuk API Key Gemini Gratis'
+                      : 'Mode Lokal • API Key Gemini diatur oleh Admin'}
                   </p>
                 </div>
               </div>
@@ -1058,6 +1144,37 @@ ${menuSummary}
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   <span>API Key & Model Gemini Flash berhasil disimpan oleh Admin!</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {!apiKey && !showKeyConfig && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-[11px] flex items-center justify-between gap-2 overflow-hidden"
+                >
+                  <span className="text-amber-200 truncate">
+                    Belum terhubung ke <strong>Gemini Gratis</strong> (sedang mode lokal).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isAdmin) {
+                        setTempKey(apiKey);
+                        setShowKeyConfig(true);
+                      } else if (onRequestAdminLogin) {
+                        onRequestAdminLogin();
+                      } else {
+                        setShowKeyConfig(true);
+                      }
+                    }}
+                    className="shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-2.5 py-1 text-[10px] font-extrabold text-slate-950 transition"
+                  >
+                    {isAdmin ? 'Pasang API Key' : 'Login Admin'}
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>

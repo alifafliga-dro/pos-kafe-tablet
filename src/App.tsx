@@ -124,20 +124,33 @@ export function App() {
   const [clock, setClock] = useState<string>('');
   const [serverConnected, setServerConnected] = useState<boolean>(true);
   const isHydratedFromServer = useRef<boolean>(false);
+  const isStaticHostRef = useRef<boolean>(
+    typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')
+  );
   const lastSyncedStamp = useRef<string>('');
 
   // Sync from central Vite POS Server on mount & poll for multi-client real-time updates
   useEffect(() => {
+    if (isStaticHostRef.current) {
+      setServerConnected(false);
+      return;
+    }
+
     let active = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     const pullServerState = async (isInitial = false) => {
       try {
         const res = await fetch('/api/pos/state');
-        if (
-          !res.ok ||
-          !(res.headers.get('content-type') || '').includes('application/json')
-        ) {
-          setServerConnected(true);
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          // Static host without Vite POS server: stop polling so we don't spam 404s.
+          isStaticHostRef.current = true;
+          setServerConnected(false);
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
           return;
         }
         const json = await res.json();
@@ -182,10 +195,10 @@ export function App() {
     };
 
     pullServerState(true);
-    const pollTimer = setInterval(() => pullServerState(false), 4000);
+    pollTimer = setInterval(() => pullServerState(false), 4000);
     return () => {
       active = false;
-      clearInterval(pollTimer);
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, []);
 
@@ -196,13 +209,14 @@ export function App() {
     cashflow?: CashflowRecord[];
     storeSettings?: StoreSettings;
   }) => {
+    if (isStaticHostRef.current) return;
     try {
       const res = await fetch('/api/pos/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
         const data = await res.json();
         if (data?.updatedAt) {
           lastSyncedStamp.current = data.updatedAt;

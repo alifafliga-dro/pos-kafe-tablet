@@ -163,6 +163,13 @@ export const PosView: React.FC<PosViewProps> = ({
 
   const confirmCustomizedAdd = () => {
     if (!customizingItem) return;
+    if (
+      !customizingItem.isAvailable ||
+      getQtyInCart(customizingItem.id) >= customizingItem.stock
+    ) {
+      setCustomizingItem(null);
+      return;
+    }
     const isDrink =
       customizingItem.category === 'Kopi & Espresso' ||
       customizingItem.category === 'Non-Kopi & Teh';
@@ -691,7 +698,10 @@ export const PosView: React.FC<PosViewProps> = ({
               <motion.button
                 whileTap={tapScale}
                 type="button"
-                onClick={() => setCart([])}
+                onClick={() => {
+                  setCart([]);
+                  setDiscountAmount(0);
+                }}
                 className="rounded-2xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3.5 py-3.5 text-rose-300 transition"
                 title="Kosongkan Keranjang"
               >
@@ -938,9 +948,15 @@ export const PosView: React.FC<PosViewProps> = ({
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-sm">
                       <span className="text-slate-400">Uang Kembalian:</span>
-                      <span className="font-extrabold text-emerald-400 tabular-nums">
-                        {formatRupiah(animatedChange)}
-                      </span>
+                      {cashReceived < totalAmount ? (
+                        <span className="font-extrabold text-rose-400 tabular-nums">
+                          Kurang {formatRupiah(totalAmount - cashReceived)}
+                        </span>
+                      ) : (
+                        <span className="font-extrabold text-emerald-400 tabular-nums">
+                          {formatRupiah(animatedChange)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -974,11 +990,20 @@ export const PosView: React.FC<PosViewProps> = ({
                   Kembali
                 </motion.button>
                 <motion.button
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={tapScale}
+                  whileHover={
+                    paymentMethod === 'Tunai' && cashReceived < totalAmount
+                      ? undefined
+                      : { scale: 1.01 }
+                  }
+                  whileTap={
+                    paymentMethod === 'Tunai' && cashReceived < totalAmount
+                      ? undefined
+                      : tapScale
+                  }
                   type="button"
+                  disabled={paymentMethod === 'Tunai' && cashReceived < totalAmount}
                   onClick={handleFinalizeOrder}
-                  className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 py-3.5 font-extrabold text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition"
+                  className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-40 disabled:cursor-not-allowed py-3.5 font-extrabold text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition"
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>Selesaikan & Tampilkan Struk</span>

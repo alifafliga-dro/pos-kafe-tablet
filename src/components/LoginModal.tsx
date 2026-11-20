@@ -153,7 +153,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl grid grid-cols-1 md:grid-cols-12"
+          className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl grid grid-cols-1 md:grid-cols-12"
         >
           {!forceLock && (
             <button
