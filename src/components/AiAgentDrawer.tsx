@@ -273,7 +273,11 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
 
   const isValidGeminiKey = (raw: string) => {
     const cleaned = sanitizeKey(raw);
-    return Boolean(cleaned && cleaned.startsWith('AIza') && cleaned.length >= 30);
+    return Boolean(
+      cleaned &&
+        cleaned.length >= 20 &&
+        (cleaned.startsWith('AQ.') || cleaned.startsWith('AIza'))
+    );
   };
 
   const hasValidApiKey = isValidGeminiKey(apiKey);
@@ -281,7 +285,7 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
   // Automatically discover available Flash models when API key is configured
   useEffect(() => {
     const clean = sanitizeKey(apiKey);
-    if (!clean || !clean.startsWith('AIza') || clean.length < 30) return;
+    if (!isValidGeminiKey(clean)) return;
     const ctrl = new AbortController();
     discoverFlashModels(clean, ctrl.signal).then((models) => {
       if (models.length > 0) {
@@ -357,10 +361,10 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     e.preventDefault();
     if (!isAdmin) return;
     const cleaned = sanitizeKey(tempKey);
-    if (cleaned && (!cleaned.startsWith('AIza') || cleaned.length < 30)) {
+    if (cleaned && !isValidGeminiKey(cleaned)) {
       setTestStatus({
         type: 'error',
-        message: 'Format API Key tidak valid. Pastikan dimulai dengan "AIza..." dari Google AI Studio.',
+        message: 'Format API Key tidak valid. Pastikan diawali "AQ." atau "AIza" dari Google AI Studio.',
       });
       return;
     }
@@ -419,7 +423,7 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     abortControllerRef.current = mainAbort;
 
     let liveDiscovered = discoveredModels;
-    if (liveDiscovered.length === 0 && cleanKey.startsWith('AIza')) {
+    if (liveDiscovered.length === 0 && isValidGeminiKey(cleanKey)) {
       const discoverCtrl = new AbortController();
       const onMainAbort = () => discoverCtrl.abort();
       mainAbort.signal.addEventListener('abort', onMainAbort);
@@ -541,7 +545,7 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     if (!cleaned) {
       setTestStatus({
         type: 'error',
-        message: 'Masukkan API Key Google AI Studio terlebih dahulu (AIzaSy...).',
+        message: 'Masukkan API Key Google AI Studio terlebih dahulu (AQ.Ab... atau AIzaSy...).',
       });
       return;
     }
@@ -875,7 +879,7 @@ ${menuSummary}
     setLastPendingPrompt(textToSend);
     setIsLoading(true);
 
-    // If a valid Google API Key (AIza...) is configured, try Google Gemini Cloud API first;
+    // If a valid Google API Key (AQ.... or AIza...) is configured, try Google Gemini Cloud API first;
     // otherwise or on any cloud error, answer using the Automatic Smart POS Engine with diagnostic reason
     if (isValidGeminiKey(activeKey)) {
       const reqAbort = new AbortController();
@@ -934,7 +938,7 @@ ${menuSummary}
       setTimeout(() => {
         const reply = generateSmartLocalFallback(textToSend);
         const content = activeKey
-          ? `⚠️ **API Key Gemini tersimpan tidak valid** (harus diawali \`AIza...\` minimal 30 karakter). Periksa kembali API Key di ikon ⚙️.\n\n*Berikut jawaban dari Smart POS Engine lokal:*\n\n${reply}`
+          ? `⚠️ **API Key Gemini tersimpan tidak valid** (harus diawali \`AQ.\` atau \`AIza\` minimal 20 karakter). Periksa kembali API Key di ikon ⚙️.\n\n*Berikut jawaban dari Smart POS Engine lokal:*\n\n${reply}`
           : reply;
         setMessages((prev) => [
           ...prev,
@@ -1171,7 +1175,7 @@ ${menuSummary}
                 >
                   <span className="text-amber-200 truncate">
                     {apiKey
-                      ? 'API Key tersimpan tidak valid (perlu AIza...).'
+                      ? 'API Key tersimpan tidak valid (perlu AQ. atau AIza).'
                       : <>Belum terhubung ke <strong>Gemini Gratis</strong> (sedang mode lokal).</>}
                   </span>
                   <button
@@ -1307,7 +1311,7 @@ ${menuSummary}
                             setTempKey(e.target.value);
                             setTestStatus({ type: 'idle', message: '' });
                           }}
-                          placeholder="AIzaSy..."
+                          placeholder="AQ.Ab... atau AIzaSy..."
                           className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white font-mono"
                         />
                       </div>
