@@ -271,6 +271,13 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
       .replace(/^Bearer\s+/i, '')
       .replace(/["'\s]/g, '');
 
+  const isValidGeminiKey = (raw: string) => {
+    const cleaned = sanitizeKey(raw);
+    return Boolean(cleaned && cleaned.startsWith('AIza') && cleaned.length >= 30);
+  };
+
+  const hasValidApiKey = isValidGeminiKey(apiKey);
+
   // Automatically discover available Flash models when API key is configured
   useEffect(() => {
     const clean = sanitizeKey(apiKey);
@@ -287,14 +294,14 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
   const buildWelcomeMessage = (): ChatMessage => ({
     id: 'welcome-1',
     role: 'assistant',
-    content: apiKey
+    content: hasValidApiKey
       ? `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent (Google Gemini Flash Cloud)**.\n\nPilih **Opsi Tanya AI** di bawah atau ketik langsung pertanyaan seputar stok barang, analisis omset & laba, rekomendasi paket menu, maupun panduan kasir!`
-      : `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent**.\n\nSaat ini berjalan di **Mode Lokal Pintar**. Untuk terhubung ke **Google Gemini Flash Gratis**, klik tombol **Hubungkan Gemini Gratis** di atas (khusus Admin) dan masukkan API Key dari Google AI Studio.`,
+      : `Halo **${currentUser.name.split(' (')[0]}**! 👋 Saya **KopiNusa AI Agent**.\n\nSaat ini berjalan di **Mode Lokal Pintar**. Untuk terhubung ke **Google Gemini Flash Gratis**, klik tombol **Pasang API Key** di atas (khusus Admin) dan masukkan API Key dari Google AI Studio.`,
     timestamp: new Date().toLocaleTimeString('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
     }),
-    source: apiKey ? 'Gemini Flash Cloud Ready' : 'Smart POS Lokal (Belum Pakai API Key)',
+    source: hasValidApiKey ? 'Gemini Flash Cloud Ready' : 'Smart POS Lokal (Belum Pakai API Key)',
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [buildWelcomeMessage()]);
@@ -442,7 +449,7 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
     let firstError = '';
 
     const payloadBody = JSON.stringify({
-      system_instruction: {
+      systemInstruction: {
         parts: [{ text: systemInstruction }],
       },
       contents: [
@@ -605,7 +612,8 @@ export const AiAgentDrawer: React.FC<AiAgentDrawerProps> = ({
       .join('\n');
 
     return `
-Anda adalah "KopiNusa AI Agent", asisten pintar pada aplikasi kasir tablet "${settings.storeName}".
+Anda adalah "KopiNusa AI Agent" yang ditenagai oleh Google Gemini Flash, asisten pintar pada aplikasi kasir tablet "${settings.storeName}".
+Jika ditanya apakah Anda Gemini, jawab dengan jujur bahwa Anda adalah asisten KopiNusa POS berbasis Google Gemini Flash.
 Jawablah selalu dalam Bahasa Indonesia yang singkat, padat, ramah, dan terstruktur dengan bullet points agar mudah dibaca di layar tablet.
 
 PENGGUNA AKTIF SAAT INI:
@@ -869,7 +877,7 @@ ${menuSummary}
 
     // If a valid Google API Key (AIza...) is configured, try Google Gemini Cloud API first;
     // otherwise or on any cloud error, answer using the Automatic Smart POS Engine with diagnostic reason
-    if (activeKey && activeKey.startsWith('AIza') && activeKey.length >= 30) {
+    if (isValidGeminiKey(activeKey)) {
       const reqAbort = new AbortController();
       abortControllerRef.current = reqAbort;
       try {
@@ -925,17 +933,20 @@ ${menuSummary}
       // Instant automatic chat response (~200ms)
       setTimeout(() => {
         const reply = generateSmartLocalFallback(textToSend);
+        const content = activeKey
+          ? `⚠️ **API Key Gemini tersimpan tidak valid** (harus diawali \`AIza...\` minimal 30 karakter). Periksa kembali API Key di ikon ⚙️.\n\n*Berikut jawaban dari Smart POS Engine lokal:*\n\n${reply}`
+          : reply;
         setMessages((prev) => [
           ...prev,
           {
             id: `ai-${Date.now()}`,
             role: 'assistant',
-            content: reply,
+            content,
             timestamp: new Date().toLocaleTimeString('id-ID', {
               hour: '2-digit',
               minute: '2-digit',
             }),
-            source: 'AI Kasir Otomatis (Real-Time)',
+            source: activeKey ? 'Smart POS Engine (Key Tidak Valid)' : 'AI Kasir Otomatis (Real-Time)',
           },
         ]);
         setIsLoading(false);
@@ -1079,8 +1090,10 @@ ${menuSummary}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {apiKey
-                      ? '✓ Terhubung ke Google Gemini Flash Cloud'
+                    {hasValidApiKey
+                      ? '✓ API Key Terpasang • Google Gemini Flash Cloud'
+                      : apiKey
+                      ? '⚠️ Format API Key tidak valid • Cek ikon ⚙️'
                       : isAdmin
                       ? 'Mode Lokal • Klik ⚙️ untuk API Key Gemini Gratis'
                       : 'Mode Lokal • API Key Gemini diatur oleh Admin'}
@@ -1149,7 +1162,7 @@ ${menuSummary}
             </AnimatePresence>
 
             <AnimatePresence>
-              {!apiKey && !showKeyConfig && (
+              {!hasValidApiKey && !showKeyConfig && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -1157,7 +1170,9 @@ ${menuSummary}
                   className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-[11px] flex items-center justify-between gap-2 overflow-hidden"
                 >
                   <span className="text-amber-200 truncate">
-                    Belum terhubung ke <strong>Gemini Gratis</strong> (sedang mode lokal).
+                    {apiKey
+                      ? 'API Key tersimpan tidak valid (perlu AIza...).'
+                      : <>Belum terhubung ke <strong>Gemini Gratis</strong> (sedang mode lokal).</>}
                   </span>
                   <button
                     type="button"
